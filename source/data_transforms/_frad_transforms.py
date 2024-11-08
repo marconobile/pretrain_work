@@ -1,33 +1,46 @@
-from rdkit.Chem import rdMolTransforms
-import copy
+import torch
 import numpy as np
 from rdkit import Chem
-from rdkit.Geometry import Point3D
-from rdkit.Chem import AllChem
-import torch
+from rdkit.Chem import AllChem, rdMolTransforms
+from rdkit.Chem.rdchem import HybridizationType
+# from geqtrain.utils.torch_geometric import Data
 
-# import pandas as pd
-# from rdkit.Chem import rdmolops
-# from rdkit.Chem.rdchem import BondType as BT
-# from rdkit.Chem.rdchem import HybridizationType
-# from torch_geometric.utils import one_hot, scatter
-# from numpy import load
+def get_conformer(mol, max_attempts:int=10):
+    try:
+        out = mol.GetConformer() # if fails mol needs to be embedded
+        return out if out != -1 else None
+    except:
+        try:
+            # ps = AllChem.ETKDG()
+            # ps.maxIterations = 10
+            kwargs = {
+                # "numConfs":1,
+                "useRandomCoords":True, # this is important to be true
+                "useSmallRingTorsions":True,
+                "useMacrocycleTorsions":True,
+                # "params":ps,
+                "maxAttempts":max_attempts,
+            }
+            success = AllChem.EmbedMolecule(mol, **kwargs) != -1
+            if success:
+                out = mol.GetConformer() # if mol embedding works this should be ok
+                return out if out != -1 else None
+        except: return None
+    return None
 
-# from torch_geometric.data import (
-#     Data,
-#     InMemoryDataset,
-#     download_url,
-#     extract_zip,
-# )
-# from rdkit.Chem import Draw
-# from collections import defaultdict
-# import collections
-# import random
-# import math
-# import py3Dmol
-# from io import BytesIO
-# from PIL import Image
-# import torch
+def preprocess_mol(m, sanitize=True):
+    if m == None: return None
+    try:
+        m = Chem.AddHs(m)
+        # drops any disconnected fragment
+        fragments = Chem.GetMolFrags(m, asMols=True)
+        m = max(fragments, key=lambda frag: frag.GetNumAtoms())
+        if sanitize:
+            error = Chem.SanitizeMol(m)
+            if error: return None
+    except: return None
+    return m
+
 
 def get_torsions(mol_list):
     """
@@ -97,10 +110,12 @@ def SetDihedral(conf, atom_idx, new_vale):
         new_vale (float): The new value of the dihedral angle in degrees.
 
     """
+    # rdMolTransforms.SetDihedralDeg(conf, atom_idx[0], atom_idx[1], atom_idx[2], atom_idx[3], new_vale)
     try:
         rdMolTransforms.SetDihedralDeg(conf, atom_idx[0], atom_idx[1], atom_idx[2], atom_idx[3], new_vale)
     except:
         rdMolTransforms.SetDihedralDeg(conf, atom_idx[1], atom_idx[0], atom_idx[2], atom_idx[3], new_vale)
+        print('--------- dihedral idxs were swapped ---------')
 
 def GetDihedral(conf, atom_idx):
     """
@@ -133,8 +148,8 @@ def apply_changes(mol, values, rotable_bonds):
     """
     [SetDihedral(mol.GetConformer(), rotable_bonds[r], values[r].item()) for r in range(len(rotable_bonds))]
 
-def transform_noise(data, position_noise_scale):
-    return data + np.random.normal(loc=0, scale=1, size=data.shape) * position_noise_scale
+# def transform_noise(data, position_noise_scale):
+#     return data + np.random.normal(loc=0, scale=1, size=data.shape) * position_noise_scale
 
 def nosify_mol(data):
     '''
@@ -144,45 +159,162 @@ def nosify_mol(data):
     dihedral_noise_tau, coords_noise_tau = 2, 0.04
     mol = Chem.MolFromSmiles(str(data.smiles))
     mol = Chem.AddHs(mol)
-    id:int = AllChem.EmbedMolecule(mol, useRandomCoords=True, enforceChirality = True, useExpTorsionAnglePrefs= True, useBasicKnowledge= True, useMacrocycleTorsions= True)
-    # if id == -1: return data
+    conf = get_conformer(mol)
 
-    # enforceChirality : enforce the correct chirality if chiral centers are present.
-    # useExpTorsionAnglePrefs : impose experimental torsion angle preferences
-    # useBasicKnowledge : impose basic knowledge such as flat rings
-    # printExpTorsionAngles : print the output from the experimental torsion angles
-    # useMacrocycleTorsions : use additional torsion profiles for macrocycles
-    #! https://greglandrum.github.io/rdkit-blog/posts/2024-07-28-confgen-and-intramolecular-hbonds.html
-    #! https://www.rdkit.org/docs/RDKit_Book.html#conformer-generation
-    # EmbedMolecule doc
-    # https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMolecule
+    if conf == None:
+        # do not change coords
+        # return data obj with noise equal to 0
+        data.noise_target = torch.zeros_like(data.pos, dtype=torch.float)
+        print("bad mol:", str(data.smiles))
+        return data
 
-    # https://www.rdkit.org/docs/source/rdkit.Chem.rdForceFieldHelpers.html
-    # AllChem.MMFFOptimizeMolecule(mol)
-
-    # https://www.rdkit.org/docs/source/rdkit.Chem.AllChem.html
-    # https://www.rdkit.org/docs/GettingStartedInPython.html#working-with-3d-molecules
-
-    #? https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMolecule
-
-    # rotable_bonds = get_torsions([mol]) #! this MUST BE EXTRACT AT DSET LVL
-    # dihedral_angles_degrees = np.array([GetDihedral(mol.GetConformer(), rot_bond) for rot_bond in rotable_bonds]) #! this MUST BE EXTRACT AT DSET LVL
-
-    rotable_bonds = data.rotable_bonds.tolist()
-    if rotable_bonds:
-        original_dihedral_angles_degrees = data.dihedral_angles_degrees
+    # apply dihedral noise
+    try:
+        # if good conformer try to apply noise using precomputed torsional idxs/angles
+        rotable_bonds = data.rotable_bonds.tolist()
+        if rotable_bonds:
+            original_dihedral_angles_degrees = data.dihedral_angles_degrees
+            # apply dihedral noise
+            noised_dihedral_angles_degrees = original_dihedral_angles_degrees + np.random.normal(0, 1, size=original_dihedral_angles_degrees.shape) * dihedral_noise_tau
+            apply_changes(mol, noised_dihedral_angles_degrees, rotable_bonds)
+    except:
+        # if idxs not good, recompute all
+        rotable_bonds = get_torsions([mol])
+        original_dihedral_angles_degrees = np.array([GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds])
         # apply dihedral noise
-        noised_dihedral_angles_degrees = original_dihedral_angles_degrees + np.random.normal(loc=0, scale=1, size=original_dihedral_angles_degrees.shape) * dihedral_noise_tau
+        noised_dihedral_angles_degrees = original_dihedral_angles_degrees + np.random.normal(0, 1, size=original_dihedral_angles_degrees.shape) * dihedral_noise_tau
         apply_changes(mol, noised_dihedral_angles_degrees, rotable_bonds)
 
     # apply coords noise
-    pos_after_dihedral_noise = mol.GetConformer().GetPositions()
-    pos_noise_to_be_predicted = np.random.normal(loc=0, scale=1, size=pos_after_dihedral_noise.shape) * coords_noise_tau
+    pos_after_dihedral_noise = conf.GetPositions()
+    pos_noise_to_be_predicted = np.random.normal(0, 1, size=pos_after_dihedral_noise.shape) * coords_noise_tau
 
-    data.noise_target = torch.tensor(pos_noise_to_be_predicted, dtype=torch.float) # todo, which field to set?
+    # set in data object for training
+    data.noise_target = torch.tensor(pos_noise_to_be_predicted, dtype=torch.float)
     data.pos = torch.tensor(pos_after_dihedral_noise + pos_noise_to_be_predicted, dtype=torch.float)
 
     return data
+
+
+def mol2pyg_with_noise(data):
+    '''
+    either returns data pyg data obj or None if some operations are not possible
+    IMPO: this does not set y
+    '''
+    types={'Br': 0, 'C': 1, 'Cl': 2, 'F': 3, 'H': 4, 'I': 5, 'N': 6, 'O': 7, 'S': 8}
+    mol = Chem.MolFromSmiles(str(data['smiles']))
+
+    mol = preprocess_mol(mol)
+    if mol == None:
+      data.noise_target = torch.zeros_like(data['pos'])
+      return data
+    conf = get_conformer(mol)
+    if conf == None:
+      data.noise_target = torch.zeros_like(data['pos'])
+      return data
+
+    # now apply noise
+    dihedral_noise_tau, coords_noise_tau = 2, 0.04
+    rotable_bonds = get_torsions([mol])
+    original_dihedral_angles_degrees = np.array([GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds])
+
+    # apply dihedral noise
+    noised_dihedral_angles_degrees = original_dihedral_angles_degrees + np.random.normal(0, 1, size=original_dihedral_angles_degrees.shape) * dihedral_noise_tau
+    apply_changes(mol, noised_dihedral_angles_degrees, rotable_bonds)
+
+    # apply coords noise
+    pos_after_dihedral_noise = conf.GetPositions()
+    pos_noise_to_be_predicted = np.random.normal(0, 1, size=pos_after_dihedral_noise.shape) * coords_noise_tau
+
+    # then do stuff
+    type_idx, aromatic, is_in_ring, _hybridization, chirality = [], [], [], [], []
+    for atom in mol.GetAtoms():
+
+        type_idx.append(types[atom.GetSymbol()])
+        aromatic.append(1 if atom.GetIsAromatic() else 0)
+        is_in_ring.append(1 if atom.IsInRing() else 0)
+        # https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html#rdkit.Chem.rdchem.ChiralType
+        chirality.append(atom.GetChiralTag())
+
+        hybridization = atom.GetHybridization()
+        hybridization_value = 0
+        if hybridization == HybridizationType.SP: hybridization_value = 1
+        elif hybridization == HybridizationType.SP2: hybridization_value = 2
+        elif hybridization == HybridizationType.SP3: hybridization_value = 3
+        _hybridization.append(hybridization_value)
+
+    rows, cols, edge_types = [], [], []
+    for bond in mol.GetBonds():
+        start, end = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        rows += [start, end]
+        cols += [end, start]
+
+    edge_index = torch.tensor([rows, cols], dtype=torch.long)
+
+    data.z=torch.tensor(type_idx)
+    data.pos=torch.tensor(pos_after_dihedral_noise + pos_noise_to_be_predicted, dtype=torch.float32)
+    data.hybridization=torch.tensor(_hybridization, dtype=torch.long)
+    data.is_aromatic=torch.tensor(aromatic, dtype=torch.long)
+    data.is_in_ring=torch.tensor(is_in_ring, dtype=torch.long)
+    data.chirality=torch.tensor(chirality, dtype=torch.long)
+    data.rotable_bonds=torch.tensor(rotable_bonds, dtype=torch.long)
+    data.noise_target=torch.tensor(pos_noise_to_be_predicted, dtype=torch.float32)
+    data.edge_index = edge_index
+    return data
+
+
+
+# def nosify_mol(data):
+#     '''
+#     data: pyg data object
+#     return: pyg data object with new coords
+#     '''
+#     dihedral_noise_tau, coords_noise_tau = 2, 0.04
+
+#     # params = Chem.SmilesParserParams()
+#     # params.removeHs = False
+#     mol = Chem.MolFromSmiles(str(data.smiles)) #, params)
+#     # mol = preprocess_mol(mol)
+#     mol
+#     id:int = AllChem.EmbedMolecule(mol,
+#                                    useRandomCoords=True,
+#                                    enforceChirality = True,       # enforceChirality : enforce the correct chirality if chiral centers are present.
+#                                    useExpTorsionAnglePrefs= True, # useExpTorsionAnglePrefs : impose experimental torsion angle preferences
+#                                    useBasicKnowledge= True,       # useBasicKnowledge : impose basic knowledge such as flat rings
+#                                    useMacrocycleTorsions= True,   # useMacrocycleTorsions : use additional torsion profiles for macrocycles
+#                                 )
+#     # https://greglandrum.github.io/rdkit-blog/posts/2024-07-28-confgen-and-intramolecular-hbonds.html
+#     # https://www.rdkit.org/docs/RDKit_Book.html#conformer-generation
+#     # https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMolecule
+#     # https://www.rdkit.org/docs/source/rdkit.Chem.rdForceFieldHelpers.html
+#     # https://www.rdkit.org/docs/source/rdkit.Chem.AllChem.html
+#     #! https://www.rdkit.org/docs/GettingStartedInPython.html#working-with-3d-molecules
+
+
+#     try:
+#         rotable_bonds = data.rotable_bonds.tolist()
+#         if rotable_bonds:
+#             original_dihedral_angles_degrees = data.dihedral_angles_degrees
+#             # apply dihedral noise
+#             noised_dihedral_angles_degrees = original_dihedral_angles_degrees + np.random.normal(loc=0, scale=1, size=original_dihedral_angles_degrees.shape) * dihedral_noise_tau
+#             apply_changes(mol, noised_dihedral_angles_degrees, rotable_bonds)
+#     except:
+#         print("issue found")
+#         rotable_bonds = get_torsions([mol])
+#         original_dihedral_angles_degrees = np.array([GetDihedral(mol.GetConformer(), rot_bond) for rot_bond in rotable_bonds])
+#         # apply dihedral noise
+#         noised_dihedral_angles_degrees = original_dihedral_angles_degrees + np.random.normal(loc=0, scale=1, size=original_dihedral_angles_degrees.shape) * dihedral_noise_tau
+#         apply_changes(mol, noised_dihedral_angles_degrees, rotable_bonds)
+
+
+#     # apply coords noise
+#     pos_after_dihedral_noise = mol.GetConformer().GetPositions()
+#     pos_noise_to_be_predicted = np.random.normal(loc=0, scale=1, size=pos_after_dihedral_noise.shape) * coords_noise_tau
+
+#     data.noise_target = torch.tensor(pos_noise_to_be_predicted, dtype=torch.float) # todo, which field to set?
+#     data.pos = torch.tensor(pos_after_dihedral_noise + pos_noise_to_be_predicted, dtype=torch.float)
+
+#     return data
 
 
 # def nosify_mol(data):
