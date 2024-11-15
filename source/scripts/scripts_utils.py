@@ -1,10 +1,16 @@
+# for AccuracyMetric
+from sklearn.metrics import (
+  precision_recall_fscore_support,
+  confusion_matrix,
+  roc_auc_score,
+  balanced_accuracy_score,
+  f1_score,
+)
+
+
+# for DescriptorWriter
 import h5py
-
-from sklearn.metrics import precision_recall_fscore_support as score
-from sklearn.metrics import confusion_matrix, roc_auc_score
-
 from torch_scatter import scatter
-
 from geqtrain.data import AtomicDataDict
 
 
@@ -13,7 +19,6 @@ class AccuracyMetric(object):
         '''
         key: key to be taken from ref_data
         '''
-
         self.key = key
         self._gts_list, self._preds_list, self._logits_list = [], [], []
 
@@ -21,15 +26,24 @@ class AccuracyMetric(object):
         target = ref_data[self.key].cpu().bool()
         _logits = out[self.key].sigmoid()
         prediction = (_logits>.5).cpu().bool()
-
         self._gts_list += target.squeeze().tolist()
         self._logits_list += _logits.squeeze().tolist()
         self._preds_list += prediction.squeeze().tolist()
 
-    def current_result(self):
+    def print_current_result(self):
         conf_matrix = confusion_matrix(self._gts_list, self._preds_list, labels=[False, True])
+        print('conf_matrix: ', conf_matrix)
         _roc_auc_score = roc_auc_score(self._gts_list, self._logits_list)
-        return conf_matrix, _roc_auc_score
+        print('_roc_auc_score: ', _roc_auc_score)
+        precision, recall, fscore, support = precision_recall_fscore_support(self._gts_list, self._preds_list)
+        print('precision: ', precision)
+        print('recall: ', recall)
+        print('fscore: ', fscore)
+        print('support: ', support)
+        ba = balanced_accuracy_score(self._gts_list, self._preds_list)
+        f1 = f1_score(self._gts_list, self._preds_list, average='binary')
+        print('balanced accuracy: ',ba)
+        print('f1 score: ', f1)
 
 
 class DescriptorWriter(object):

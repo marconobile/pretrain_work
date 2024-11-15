@@ -37,7 +37,11 @@ class DrugTaxEncoder():
     return np.array([np.array(list(drugtax.DrugTax(smi).features.values())) for smi in smiles_list])
 
 class MyAllegroEncoder():
+  # TODO
   pass
+
+
+# TODO MODEL ENSAMBLING
 
 
 ##########
@@ -97,8 +101,6 @@ if __name__ == "__main__":
   drugtax_encoder = DrugTaxEncoder()
   drugtax_encodings_train = drugtax_encoder.encode(TRAIN_smi)
   drugtax_encodings_val = drugtax_encoder.encode(VAL_smi)
-
-  # TODO write an export to csv for report
 
   # MODELS
   print("RF WITH CHEMNET ENCODINGS")

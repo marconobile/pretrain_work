@@ -98,7 +98,6 @@ def create_log(path, name="log.txt"):
     generate_file(path, name)
     return os.path.join(path, name)
 
-
 def append_line_to_log(path_to_log, line):
     with open(path_to_log, "a") as log:
         log.write(line + "\n")

@@ -95,8 +95,6 @@ def check_if_all_sanitizable(smiles):
     assert len(mols) == len(smiles)
     return mols
 
-
-
 def print_frad_npz(path):
     data = np.load(path)
     lst = data.files

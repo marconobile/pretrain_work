@@ -34,8 +34,8 @@ class FocalLossBinaryAccuracy:
         '''
 
         self.func_name = "FocalLossBinaryAccuracy"
-        self.alpha: float = 0.95
-        self.gamma: float = 10
+        self.alpha: float = 0.65
+        self.gamma: float = 2
         assert (0<self.alpha and self.alpha<1)
 
     def __call__(

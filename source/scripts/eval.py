@@ -414,7 +414,7 @@ def main(args=None, running_as_script: bool = True):
         )
     )
     logger.info("\n--- End of evaluation ---")
-    print(cbs[0].current_result())
+    cbs[0].print_current_result()
 
 
 
