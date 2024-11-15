@@ -26,7 +26,11 @@ from geqtrain.utils import Config
 from geqtrain.utils.auto_init import instantiate
 from geqtrain.utils.savenload import load_file
 
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_auc_score
+
+# python ./source/scripts/evaluate_halicin.py -td /home/nobilm@usi.ch/pretrain_paper/results/halicin/halicin_og_model -d cuda:1 -m /home/nobilm@usi.ch/pretrain_paper/results/halicin/halicin_og_model/last_model.pth
+# python ./source/scripts/evaluate_halicin.py -td /home/nobilm@usi.ch/pretrain_paper/results/halicin/opioid_first_test -d cuda:0
+
 
 def main(args=None, running_as_script: bool = True):
     # in results dir, do: geqtrain-deploy build --train-dir . deployed.pth
@@ -266,8 +270,7 @@ def main(args=None, running_as_script: bool = True):
 
     # run inference
     logger.info("Starting...")
-    conf_matrix = np.array([0.])
-
+    # _gts_list, _preds_list, _logits_list = [], [], []
     pbar = tqdm(dataloader)
     for data in pbar:
 
@@ -286,13 +289,13 @@ def main(args=None, running_as_script: bool = True):
             # accumulate metrics
             batch_metrics = metrics(pred=out, ref=ref_data)
 
-            target = ref_data["graph_output"].cpu().bool()
-            prediction = (out["graph_output"].sigmoid()>.5).cpu().bool()
+            # target = ref_data["graph_output"].cpu().bool()
+            # _logits = out["graph_output"].sigmoid()
+            # prediction = (_logits>.5).cpu().bool()
 
-            if np.sum(conf_matrix) == 0:
-                conf_matrix = confusion_matrix(target, prediction)
-            else:
-                conf_matrix += confusion_matrix(target, prediction)
+            # _gts_list += target.squeeze().tolist()
+            # _logits_list += _logits.squeeze().tolist()
+            # _preds_list += prediction.squeeze().tolist()
 
             desc = '\t'.join(
                 f'{k:>20s} = {v:< 20f}'
@@ -327,10 +330,10 @@ def main(args=None, running_as_script: bool = True):
             )[0].items()
         )
     )
-    print(conf_matrix)
-    tn, fp, fn, tp = conf_matrix.ravel()
-    print("tn: ", tn, "fp: ", fp, "fn: ", fn, "tp: ", tp)
 
+    conf_matrix = confusion_matrix(_gts_list, _preds_list, labels=[False, True])
+    _roc_auc_score = roc_auc_score(_gts_list, _logits_list)
+    print(conf_matrix, _roc_auc_score)
 
 
 def load_model(model: Path, device="cpu"):

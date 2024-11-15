@@ -1,0 +1,1 @@
+Repo for : "Ligand Activity Prediciton Pretraining Large EGNN"
