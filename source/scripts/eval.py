@@ -23,64 +23,6 @@ from scripts_utils import AccuracyMetric, DescriptorWriter
 # -td /home/nobilm@usi.ch/pretrain_paper/results/opioid/opioid_non_global_TEST_interal_W_post_norm -d cuda:2 -bs 16
 
 
-# class AccuracyMetric(object):
-#     def __init__(self, key:str):
-#         '''
-#         key: key to be taken from ref_data
-#         '''
-#         self.key = key
-#         self._gts_list, self._preds_list, self._logits_list = [], [], []
-
-#     def __call__(self, pbar, out, ref_data, **kwargs):
-#         target = ref_data[self.key].cpu().bool()
-#         _logits = out[self.key].sigmoid()
-#         prediction = (_logits>.5).cpu().bool()
-
-#         self._gts_list += target.squeeze().tolist()
-#         self._logits_list += _logits.squeeze().tolist()
-#         self._preds_list += prediction.squeeze().tolist()
-
-#     def current_result(self):
-#         conf_matrix = confusion_matrix(self._gts_list, self._preds_list, labels=[False, True])
-#         _roc_auc_score = roc_auc_score(self._gts_list, self._logits_list)
-#         return conf_matrix, _roc_auc_score
-
-
-# class DescriptorWriter(object):
-#     def __init__(self, feat_dim:int=32, normalize_wrt_atom_count:bool=False):
-#       self.normalize_wrt_atom_count = normalize_wrt_atom_count
-#       self.feat_dim = feat_dim
-#       self.field = AtomicDataDict.NODE_FEATURES_KEY
-#       self.out_field = AtomicDataDict.GRAPH_OUTPUT_KEY
-#       self.observations, self.gt = [] , []
-
-#     def __call__(self, pbar, out, ref_data, **kwargs):
-#       '''
-#       the inpt is the data obj modified by the nn
-#       '''
-#       graph_feature = scatter(out[self.field][...,:self.feat_dim], index = out['batch'], dim=0)
-
-#       if self.normalize_wrt_atom_count:
-#           _, counts = out['batch'].unique(return_counts=True)
-#           graph_feature /=counts
-
-#       self.observations.append(graph_feature.cpu())
-#       self.gt.append(out[self.out_field].cpu())
-
-#     def write_batched_obs_to_file(self, n_batches, filename:str='./dataset.h5'):
-#       # todo, here also write smile inside h5
-#       dset_id = 0
-#       with h5py.File(filename, 'w') as h5_file:
-#         for batch_idx in range(n_batches):
-#           obs_batch, gt_batch = self.observations[batch_idx], self.gt[batch_idx]
-#           for obs_idx in range(obs_batch.shape[0]): # expected bs first
-#             obs, gt = obs_batch[obs_idx], gt_batch[obs_idx]
-#             h5_file.create_dataset(f'observation_{dset_id}', data=obs.numpy())
-#             h5_file.create_dataset(f'ground_truth_{dset_id}', data=gt.numpy())
-#             dset_id+=1
-
-
-
 def infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[], batch_callbacks=[], **kwargs):
     pbar = tqdm(dataloader)
     for batch_index, data in enumerate(pbar):
@@ -96,15 +38,12 @@ def infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[], 
                 **kwargs,
             )
 
-            for callback in chunk_callbacks:
-                callback(pbar, out, ref_data, **kwargs)
+            for callback in chunk_callbacks: callback(pbar, out, ref_data, **kwargs)
 
             already_computed_nodes = evaluate_end_chunking_condition(already_computed_nodes, batch_chunk_center_nodes, num_batch_center_nodes)
-            if already_computed_nodes is None:
-                break
+            if already_computed_nodes is None: break
 
-        for callback in batch_callbacks:
-            callback(batch_index, **kwargs)
+        for callback in batch_callbacks: callback(batch_index, **kwargs)
 
 
 def load_model(model: Union[str, Path], device="cpu"):
@@ -146,8 +85,7 @@ def load_model(model: Union[str, Path], device="cpu"):
 
 def main(args=None, running_as_script: bool = True):
     # in results dir, do: geqtrain-deploy build --train-dir . deployed.pth
-    parser = argparse.ArgumentParser(
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "-td",
         "--train-dir",
@@ -252,9 +190,7 @@ def main(args=None, running_as_script: bool = True):
             args.model = args.train_dir / "best_model.pth"
         if args.test_indexes is None and dataset_is_from_training:
             # Find the remaining indexes that aren't train or val
-            trainer = torch.load(
-                str(args.train_dir / "trainer.pth"), map_location="cpu"
-            )
+            trainer = torch.load(str(args.train_dir / "trainer.pth"), map_location="cpu")
             # if print_best_model_epoch:
             #     print(f"Loading model from epoch: {trainer.best_model_saved_at_epoch}")
             train_idcs = []
@@ -285,10 +221,7 @@ def main(args=None, running_as_script: bool = True):
     logger.setLevel(logging.INFO)
 
     logger.info(f"Using device: {device}")
-    if device.type == "cuda":
-        logger.info(
-            "WARNING: please note that models running on CUDA are usually nondeterministc and that this manifests in the final test errors; for a _more_ deterministic result, please use `--device cpu`",
-        )
+    if device.type == "cuda": logger.info("WARNING: please note that models running on CUDA are usually nondeterministc and that this manifests in the final test errors; for a _more_ deterministic result, please use `--device cpu`",)
 
     if args.use_deterministic_algorithms:
         logger.info("Telling PyTorch to try to use deterministic algorithms... please note that this will likely error on CUDA/GPU")
@@ -323,24 +256,17 @@ def main(args=None, running_as_script: bool = True):
         except KeyError:
             pass
 
-    if not (dataset_is_test or dataset_is_validation):
-        raise Exception("Either test or validation dataset must be provided.")
-    logger.info(
-        f"Loaded {'test_' if dataset_is_test else 'validation_' if dataset_is_validation else ''}dataset specified in {args.test_config.name}.",
-    )
+    if not (dataset_is_test or dataset_is_validation): raise Exception("Either test or validation dataset must be provided.")
+    logger.info(f"Loaded {'test_' if dataset_is_test else 'validation_' if dataset_is_validation else ''}dataset specified in {args.test_config.name}.",)
 
     if args.test_indexes is None:
         # Default to all frames
         test_idcs = [torch.arange(len(ds)) for ds in dataset.datasets]
-        logger.info(
-            f"Using all frames from the specified test dataset with stride {args.stride}, yielding a test set size of {len(test_idcs)} frames.",
-        )
+        logger.info(f"Using all frames from the specified test dataset with stride {args.stride}, yielding a test set size of {len(test_idcs)} frames.")
     else:
         # load from file
         test_idcs = load_file(
-            supported_formats=dict(
-                torch=["pt", "pth"], yaml=["yaml", "yml"], json=["json"]
-            ),
+            supported_formats=dict(torch=["pt", "pth"], yaml=["yaml", "yml"], json=["json"]),
             filename=str(args.test_indexes),
         )
         logger.info(f"Using provided test set indexes, yielding a test set size of {len(test_idcs)} frames.",)
@@ -399,7 +325,7 @@ def main(args=None, running_as_script: bool = True):
         pbar.set_description(f"Metrics: {desc}")
         del out, ref_data
 
-    cbs = [AccuracyMetric("graph_output")] #+ [DescriptorWriter()]
+    cbs = [AccuracyMetric("graph_output")] # [DescriptorWriter(feat_dim=config.get('latent_dim'))] # [AccuracyMetric("graph_output")]
     config.pop("device")
     infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[metrics_callback]+cbs, **config)
 
@@ -413,8 +339,10 @@ def main(args=None, running_as_script: bool = True):
             )[0].items()
         )
     )
+    # todo fix below, can't use indexing!
+    if isinstance(cbs[0], AccuracyMetric): cbs[0].print_current_result()
+    if isinstance(cbs[0], DescriptorWriter): cbs[0].write_batched_obs_to_file(len(dataloader), '/storage_common/nobilm/pretrain_paper/muOpioid_correct_splits/test_fingerprints')
     logger.info("\n--- End of evaluation ---")
-    cbs[0].print_current_result()
 
 
 

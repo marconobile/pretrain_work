@@ -34,17 +34,19 @@ class MyArgPrsr(object):
       parser = ArgumentParser()
       for el in parser_entries:
         if isinstance(el['identifiers'], list):
-          for idntf in el['identifiers']: assert isinstance(idntf, str)
+          for _identifier in el['identifiers']: assert isinstance(_identifier, str)
         elif isinstance(el['identifiers'], str): pass
         else: raise ValueError(f'identifiers not correct')
         assert isinstance(el['type'], type), f"type provided: {el['type']} is not a type"
         assert isinstance(el.get('help', ""), str), f"the help msg provided is not a str"
         if el.get('default', None): assert isinstance(el.get('default', None), el['type'])
+        if el.get('optional', None): assert isinstance(el.get('optional'), bool)
         parser.add_argument(
             *el['identifiers'] if isinstance(el['identifiers'], list) else el['identifiers'], # if identifier are [-t, --tmp] then we can access it via self.args.tmp or self.args.t
             type=el['type'],           # data type used to interpret the inpt frm cmd line
             help=el.get('help', ''),
             default=el.get('default', None),
+            nargs='?' if el.get('optional', False) else None
           )
       self.args = parser.parse_args()
 
@@ -294,6 +296,7 @@ def mol2pyg(mol, types):
 
 def save_npz(pyg_mols, f, folder_name=None, N=None, check=True):
     '''
+    no further processing of folder
     f: lambda function that defines how to treat the target value, examples:
 
         graph_labels = g['y'].numpy() # (1, N) # nb this is already unsqueezed

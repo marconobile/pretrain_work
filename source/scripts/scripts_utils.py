@@ -31,8 +31,16 @@ class AccuracyMetric(object):
         self._preds_list += prediction.squeeze().tolist()
 
     def print_current_result(self):
-        conf_matrix = confusion_matrix(self._gts_list, self._preds_list, labels=[False, True])
-        print('conf_matrix: ', conf_matrix)
+        cm = confusion_matrix(self._gts_list, self._preds_list, labels=[False, True])
+        tn, fp, fn, tp = cm.ravel()
+        matrix_string = (
+            f"Confusion Matrix:\n"
+            f"                Predicted\n"
+            f"                Positive     Negative\n"
+            f"Actual Positive   TP: {tp}        FN: {fn}\n"
+            f"       Negative   FP: {fp}        TN: {tn}\n"
+        )
+        print(matrix_string)
         _roc_auc_score = roc_auc_score(self._gts_list, self._logits_list)
         print('_roc_auc_score: ', _roc_auc_score)
         precision, recall, fscore, support = precision_recall_fscore_support(self._gts_list, self._preds_list)

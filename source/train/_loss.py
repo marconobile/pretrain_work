@@ -25,17 +25,18 @@ class FocalLossBinaryAccuracy:
     ):
         '''
         alpha is a number between 0 and 1
-        If alpha is 0.25, for example, the loss for positive examples (when the target is 1) is multiplied by 0.25,
-        and the loss for negative examples (when the target is 0) is multiplied by 0.75 (since 1-0.25=0.75).
-        This means you are giving less weight to the positive class and more weight to the negative class, which can be useful when the positive class is over-represented.
+        If alpha is 0.25, the loss for positive examples (target is 1) is multiplied by 0.25,
+        and the loss for negative examples (target is 0) is multiplied by 0.75 (since 1-0.25=0.75).
+        Effect: less weight to positive class and more weight to negative class, useful when the positive class is over-represented.
 
         gamma: purpose: focus more on hard-to-classify examples by reducing the relative loss for well-classified examples.
-        higher gamma higher focus to hard-to-classify examples i.e. examples on which the net is not so confident
+        higher gamma higher focus to hard-to-classify examples i.e. examples on which the net is not so confident.
+        scalses up the loss value when the net is not confident in the correct class
         '''
 
         self.func_name = "FocalLossBinaryAccuracy"
-        self.alpha: float = 0.65
-        self.gamma: float = 2
+        self.alpha: float = params.get('alpha', 0.85)
+        self.gamma: float = params.get('gamma', 2)
         assert (0<self.alpha and self.alpha<1)
 
     def __call__(
