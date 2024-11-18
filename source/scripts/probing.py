@@ -29,6 +29,7 @@ from my_general_utils import *
 
 import h5py
 from functools import partial
+from scripts_utils import print_eval
 
 # conda activate probing_venv
 
@@ -64,51 +65,14 @@ class MyAllegroEncoder(object):
 ##########
 
 class Model(object):
-  '''
-  every model must extend this
-  '''
+  '''every model must extend this'''
   def __init__(self, model): self.model = model
   def fit(self, x, y): raise NotImplementedError("Implement the way your model trains!")
   def get_preds(self, x): raise NotImplementedError("Implement the way your model predicts!")
   def get_probabilities(self, x): raise NotImplementedError("Implement the way your model gets normalized probs!")
-  def _compute_return_post_fit(self, x, gt):
+  def compute_return_post_fit(self, x, gt): print_eval(gt, self.get_preds(x), self.get_probabilities(x))
 
-    # preds = self.get_preds(x)
-    # print("Confusion matrix: ")
-    # print(confusion_matrix(gt, preds))
-    # print("Accuracy score: ")
-    # self.accuracy_score = accuracy_score(gt, preds)
-    # print(self.accuracy_score)
-    # print("ROC_AUC score: ")
-    # self.roc_auc_score = roc_auc_score(gt, self.get_probabilities(x))
-    # print(self.roc_auc_score)
 
-    preds = self.get_preds(x)
-    cm = confusion_matrix(gt, preds, labels=[False, True])
-    tn, fp, fn, tp = cm.ravel()
-    matrix_string = (
-        f"Confusion Matrix:\n"
-        f"                Predicted\n"
-        f"                Positive     Negative\n"
-        f"Actual Positive   TP: {tp}        FN: {fn}\n"
-        f"       Negative   FP: {fp}        TN: {tn}\n"
-    )
-    print(matrix_string)
-    _roc_auc_score = roc_auc_score(gt, self.get_preds(x))
-    print('_roc_auc_score: ', _roc_auc_score)
-    precision, recall, fscore, support = precision_recall_fscore_support(gt, preds)
-    print('precision: ', precision)
-    print('recall: ', recall)
-    print('fscore: ', fscore)
-    print('support: ', support)
-    ba = balanced_accuracy_score(gt, preds)
-    f1 = f1_score(gt, preds, average='binary')
-    print('balanced accuracy: ', ba)
-    print('f1 score: ', f1)
-
-class MLP(Model):
-  # todo
-  pass
 
 class SklearnModel(Model):
   def __init__(self, model): super().__init__(model)
@@ -150,7 +114,7 @@ if __name__ == "__main__":
     print(f"With {str(m)}")
     sklearn_model = SklearnModel(m)
     sklearn_model.fit(xt, yt)
-    sklearn_model._compute_return_post_fit(xv, yv)
+    sklearn_model.compute_return_post_fit(xv, yv)
 
   eval_chemnet = partial(f,  xt=chemnet_encodings_train, yt=TRAIN_y, xv=chemnet_encodings_val, yv=VAL_y)
   eval_drugtax = partial(f,  xt=drugtax_encodings_train, yt=TRAIN_y, xv=drugtax_encodings_val, yv=VAL_y)

@@ -14,11 +14,34 @@ from torch_scatter import scatter
 from geqtrain.data import AtomicDataDict
 
 
+def print_eval(gt, preds, logits):
+  cm = confusion_matrix(gt, preds, labels=[False, True])
+  tn, fp, fn, tp = cm.ravel()
+  matrix_string = (
+      f"Confusion Matrix:\n"
+      f"                Predicted\n"
+      f"                Positive     Negative\n"
+      f"Actual Positive   TP: {tp}        FN: {fn}\n"
+      f"       Negative   FP: {fp}        TN: {tn}\n"
+  )
+  print(matrix_string)
+  print(f"Correcttly classified: {tn+tp}, misclassified: {fp+fn}")
+  _roc_auc_score = roc_auc_score(gt, logits)
+  print('_roc_auc_score: ', _roc_auc_score)
+  precision, recall, fscore, support = precision_recall_fscore_support(gt, preds)
+  print('precision: ', precision)
+  print('recall: ', recall)
+  print('fscore: ', fscore)
+  print('support: ', support)
+  ba = balanced_accuracy_score(gt, preds)
+  f1 = f1_score(gt, preds, average='binary')
+  print('balanced accuracy: ',ba)
+  print('f1 score: ', f1)
+
+
 class AccuracyMetric(object):
     def __init__(self, key:str):
-        '''
-        key: key to be taken from ref_data
-        '''
+        '''key: key to be taken from ref_data'''
         self.key = key
         self._gts_list, self._preds_list, self._logits_list = [], [], []
 
@@ -30,29 +53,7 @@ class AccuracyMetric(object):
         self._logits_list += _logits.squeeze().tolist()
         self._preds_list += prediction.squeeze().tolist()
 
-    def print_current_result(self):
-        cm = confusion_matrix(self._gts_list, self._preds_list, labels=[False, True])
-        tn, fp, fn, tp = cm.ravel()
-        matrix_string = (
-            f"Confusion Matrix:\n"
-            f"                Predicted\n"
-            f"                Positive     Negative\n"
-            f"Actual Positive   TP: {tp}        FN: {fn}\n"
-            f"       Negative   FP: {fp}        TN: {tn}\n"
-        )
-        print(matrix_string)
-        _roc_auc_score = roc_auc_score(self._gts_list, self._logits_list)
-        print('_roc_auc_score: ', _roc_auc_score)
-        precision, recall, fscore, support = precision_recall_fscore_support(self._gts_list, self._preds_list)
-        print('precision: ', precision)
-        print('recall: ', recall)
-        print('fscore: ', fscore)
-        print('support: ', support)
-        ba = balanced_accuracy_score(self._gts_list, self._preds_list)
-        f1 = f1_score(self._gts_list, self._preds_list, average='binary')
-        print('balanced accuracy: ',ba)
-        print('f1 score: ', f1)
-
+    def print_current_result(self): print_eval(self._gts_list, self._preds_list, self._logits_list)
 
 class DescriptorWriter(object):
     def __init__(self, feat_dim:int=32, normalize_wrt_atom_count:bool=False):
