@@ -19,8 +19,11 @@ from geqtrain.utils import Config
 from geqtrain.utils.auto_init import instantiate
 from geqtrain.utils.savenload import load_file
 
-from scripts_utils import AccuracyMetric, DescriptorWriter
-# -td /home/nobilm@usi.ch/pretrain_paper/results/opioid/opioid_non_global_TEST_interal_W_post_norm -d cuda:2 -bs 16
+from source.scripts.accuracy_utils import AccuracyMetric
+from source.scripts.fingerprint_extractor import DescriptorWriter
+
+
+# -td /home/nobilm@usi.ch/pretrain_paper/results/frad/frad_merge_first_real_run_256 -d cuda:0 -bs 16
 
 
 def infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[], batch_callbacks=[], **kwargs):
@@ -147,30 +150,6 @@ def main(args=None, running_as_script: bool = True):
         type=Path,
         default=None,
     )
-    # parser.add_argument(
-    #     "--output",
-    #     help="ExtXYZ (.xyz) file to write out the test set and model predictions to.",
-    #     type=Path,
-    #     default=None,
-    # )
-    # parser.add_argument(
-    #     "--output-fields",
-    #     help="Extra fields (names[:field] comma separated with no spaces) to write to the `--output`.\n"
-    #          "Field options are: [node, edge, graph, long].\n"
-    #          "If [:field] is omitted, the field with that name is assumed to be already registered by default.",
-    #     type=str,
-    #     default="",
-    # )
-        # parser.add_argument(
-    #     "--repeat",
-    #     help=(
-    #         "Number of times to repeat evaluating the test dataset. "
-    #         "This can help compensate for CUDA nondeterminism, or can be used to evaluate error on models whose inference passes are intentionally nondeterministic. "
-    #         "Note that `--repeat`ed passes over the dataset will also be `--output`ed if an `--output` is specified."
-    #     ),
-    #     type=int,
-    #     default=1,
-    # )
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -325,7 +304,7 @@ def main(args=None, running_as_script: bool = True):
         pbar.set_description(f"Metrics: {desc}")
         del out, ref_data
 
-    cbs = [AccuracyMetric("graph_output")] # [DescriptorWriter(feat_dim=config.get('latent_dim'))] # [AccuracyMetric("graph_output")]
+    cbs = [DescriptorWriter(feat_dim=config.get('latent_dim'), only_scalars=False)] # [AccuracyMetric("graph_output")]
     config.pop("device")
     infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[metrics_callback]+cbs, **config)
 
@@ -341,8 +320,7 @@ def main(args=None, running_as_script: bool = True):
     )
     # todo fix below, can't use indexing!
     if isinstance(cbs[0], AccuracyMetric): cbs[0].print_current_result()
-    if isinstance(cbs[0], DescriptorWriter): cbs[0].write_batched_obs_to_file(len(dataloader), '/storage_common/nobilm/pretrain_paper/muOpioid_correct_splits/test_fingerprints')
-    logger.info("\n--- End of evaluation ---")
+    if isinstance(cbs[0], DescriptorWriter): cbs[0].write_batched_obs_to_file(len(dataloader), '/storage_common/nobilm/pretrain_paper/frad_descriptors/frad_descr_128/opioid/train_equivariant_fingerprints_no_transf.h5')
 
 
 
