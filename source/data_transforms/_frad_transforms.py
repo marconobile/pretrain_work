@@ -60,11 +60,8 @@ def nosify_mol(data):
     mol = Chem.AddHs(mol)
     conf = get_conformer(mol,max_attempts=10)
 
-    if conf == None:
-        # return data obj with noise equal to 0
-        data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
-        # print("bad mol:", str(data.smiles))
-        return data
+    # return data obj with noise equal to 0
+    if conf == None: return do_not_nosify_mol(data)
 
     # apply dihedral noise
     try:
@@ -92,3 +89,7 @@ def nosify_mol(data):
     data.pos = torch.tensor(pos_after_dihedral_noise + pos_noise_to_be_predicted, dtype=torch.float)
 
     return data
+
+def do_not_nosify_mol(data):
+  data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
+  return data
