@@ -174,8 +174,8 @@ def main(args=None, running_as_script: bool = True):
         if args.test_indexes is None and dataset_is_from_training:
             # Find the remaining indexes that aren't train or val
             trainer = torch.load(str(args.train_dir / "trainer.pth"), map_location="cpu")
-            # if print_best_model_epoch:
-            #     print(f"Loading model from epoch: {trainer.best_model_saved_at_epoch}")
+            if print_best_model_epoch:
+                print(f"Loading model from epoch: {trainer['state_dict']['best_model_saved_at_epoch']}")
             train_idcs = []
             dataset_offset = 0
             for tr_idcs in trainer["train_idcs"]:
