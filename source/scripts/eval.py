@@ -18,12 +18,11 @@ from geqtrain.train.utils import evaluate_end_chunking_condition
 from geqtrain.utils import Config
 from geqtrain.utils.auto_init import instantiate
 from geqtrain.utils.savenload import load_file
-
 from source.scripts.accuracy_utils import AccuracyMetric
 from source.scripts.fingerprint_extractor import DescriptorWriter
 
-
-# -td /home/nobilm@usi.ch/pretrain_paper/results/frad/frad_merge_first_real_run_256 -d cuda:0 -bs 16
+# -td /home/nobilm@usi.ch/pretrain_paper/results/frad/frad_merge_first_real_run -d cuda:0 -bs 16
+# -td /home/nobilm@usi.ch/pretrain_paper/results/frad/frad_merge_first_real_run -d cuda:0 -bs 16 -o /storage_common/nobilm/pretrain_paper/frad_descriptors/frad_descr_128/from_local_interaction/opioid/train.h5
 
 
 def infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[], batch_callbacks=[], **kwargs):
@@ -47,7 +46,6 @@ def infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[], 
             if already_computed_nodes is None: break
 
         for callback in batch_callbacks: callback(batch_index, **kwargs)
-
 
 def load_model(model: Union[str, Path], device="cpu"):
     if isinstance(model, str):
@@ -150,6 +148,12 @@ def main(args=None, running_as_script: bool = True):
         type=Path,
         default=None,
     )
+    parser.add_argument(
+        "-o",
+        "--out_descriptors",
+        type=Path,
+        default=None,
+    )
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -206,7 +210,8 @@ def main(args=None, running_as_script: bool = True):
         logger.info("Telling PyTorch to try to use deterministic algorithms... please note that this will likely error on CUDA/GPU")
         torch.use_deterministic_algorithms(True)
 
-    ## --- end of set up of arguments --- ##
+    ## --- end args setup  --- ##
+
 
     # Load model
     model, config = load_model(args.model, device=args.device)
@@ -287,7 +292,9 @@ def main(args=None, running_as_script: bool = True):
         if _dataset is not None: _indexed_datasets.append(_dataset)
     dataset_test = ConcatDataset(_indexed_datasets)
 
-    dataloader = DataLoader(dataset=dataset_test, shuffle=False,batch_size=args.batch_size)
+    bs = args.batch_size
+    if args.out_descriptors: bs = 1
+    dataloader = DataLoader(dataset=dataset_test, shuffle=False,batch_size=bs)
 
     # run inference
     logger.info("Starting...")
@@ -304,7 +311,10 @@ def main(args=None, running_as_script: bool = True):
         pbar.set_description(f"Metrics: {desc}")
         del out, ref_data
 
-    cbs = [DescriptorWriter(feat_dim=config.get('latent_dim'), only_scalars=False)] # [AccuracyMetric("graph_output")]
+    # ! CALLBACKS
+    if args.out_descriptors: cbs=[DescriptorWriter(multiplicity=config.get('latent_dim'), out_dir=args.out_descriptors)]
+    else: cbs = [AccuracyMetric("graph_output")]
+
     config.pop("device")
     infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[metrics_callback]+cbs, **config)
 
@@ -320,7 +330,7 @@ def main(args=None, running_as_script: bool = True):
     )
     # todo fix below, can't use indexing!
     if isinstance(cbs[0], AccuracyMetric): cbs[0].print_current_result()
-    if isinstance(cbs[0], DescriptorWriter): cbs[0].write_batched_obs_to_file(len(dataloader), '/storage_common/nobilm/pretrain_paper/frad_descriptors/frad_descr_128/opioid/train_equivariant_fingerprints_no_transf.h5')
+    # if isinstance(cbs[0], DescriptorWriter): cbs[0].write_batched_obs_to_file(len(dataloader), args.out_descriptors) # eg: '/storage_common/nobilm/pretrain_paper/frad_descriptors/frad_descr_128/opioid/train_equivariant_fingerprints_no_transf.h5'
 
 
 

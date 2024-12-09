@@ -14,11 +14,6 @@ import warnings
 # GENERAL UTILS #
 #################
 
-def split_list(a_list, perc_train_data):
-    assert (0.0 < perc_train_data <= 1.0)
-    split = int(len(a_list) * perc_train_data)
-    return a_list[:split], a_list[split:]
-
 ##########
 # PARSER #
 ##########
@@ -67,7 +62,6 @@ def move_files_to_folder(dst_folder, files_to_move):
         shutil.copy(src_filepath, dst_filepath)
     return out_filepaths
 
-
 ##################
 # FILES HANDLING #
 ##################
@@ -104,15 +98,21 @@ def append_line_to_log(path_to_log, line):
     with open(path_to_log, "a") as log:
         log.write(line + "\n")
 
-
 ###############
 # RDKIT UTILS #
 ###############
 
-def get_field_from_npzs(path:str, field:Union[str, List]):
-  if field == '*': return [np.load(npz) for npz in ls(path)]
-
-  if isinstance(field, str): return [np.load(el)[field].item() for el in ls(path)]
+def get_field_from_npzs(path:str, field:Union[str, List]='*'):
+  '''
+  example usage:
+  l = get_field_from_npzs(p)
+  l[0][k] -> access to content
+  '''
+  npz_files = ls(path)
+  if field == '*': return [np.load(npz) for npz in npz_files]
+  possible_keys = [k for k in np.load(npz_files[0]).keys()]
+  if field not in possible_keys: raise ValueError(f'{field} not in {possible_keys}')
+  if isinstance(field, str): return [np.load(el)[field].item() for el in npz_files]
   if not isinstance(field, List): raise ValueError(f'Unaccepted type for field, which is {type(field)}, but should be List or str ')
 
   out = []
@@ -256,13 +256,25 @@ def GetDihedral(conf, atom_idx):
     """
     return rdMolTransforms.GetDihedralDeg(conf, atom_idx[0], atom_idx[1], atom_idx[2], atom_idx[3])
 
-def mol2pyg(mol, types):
+def optimize_coords(mol, conf):
+  # pre_opt_pos = conf.GetPositions()
+  AllChem.MMFFOptimizeMoleculeConfs(
+    mol,
+    numThreads=0,
+    # maxIters=500,
+  )
+  # assert conf.GetPositions() != pre_opt_pos
+  return mol
+
+def mol2pyg(mol, types, minimize:bool=True):
     '''
     either returns data pyg data obj or None if some operations are not possible
     IMPO: this does not set y
     '''
     conf = get_conformer(mol)
     if conf == None: return None
+
+    if minimize: mol = optimize_coords(mol, conf)
 
     type_idx, aromatic, is_in_ring, _hybridization, chirality = [], [], [], [], []
     for atom in mol.GetAtoms():
@@ -328,64 +340,77 @@ def save_npz(pyg_mols, f, folder_name=None, N=None, check=True):
     (5,)
     '''
     N = N or len(pyg_mols)
-    for idx in range(N):
-        g = pyg_mols[idx]
-        file = f'{folder_name}/mol_{idx}'
+    for idx in range(N): pyg2npz(pyg_mols[idx], f'{folder_name}/mol_{idx}', f)
 
-        coords = g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
-        # in general: if fixed field it must be (N,), else (1, N)
-        atom_types = g['z'].numpy()
-        # edge_index = g['edge_index'].unsqueeze(0).numpy() # (1, 2, E)
-        # edge_attr = g['edge_attr'].unsqueeze(0).numpy() # (1, E, Edg_attr_dims)
-        hybridization = g['hybridization'].numpy()  # (N, )
-        chirality = g['chirality'].numpy()  # (N, )
-        is_aromatic = g['is_aromatic'].numpy()  # (N, )
-        is_in_ring = g['is_in_ring'].numpy()  # (N, )
-        smiles = g['smiles']
+def pyg2npz(g, file, f,  check:bool=True):
+  coords = g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
+  # in general: if fixed field it must be (N,), else (1, N)
+  atom_types = g['z'].numpy()
+  # edge_index = g['edge_index'].unsqueeze(0).numpy() # (1, 2, E)
+  # edge_attr = g['edge_attr'].unsqueeze(0).numpy() # (1, E, Edg_attr_dims)
+  hybridization = g['hybridization'].numpy()  # (N, )
+  chirality = g['chirality'].numpy()  # (N, )
+  is_aromatic = g['is_aromatic'].numpy()  # (N, )
+  is_in_ring = g['is_in_ring'].numpy()  # (N, )
+  smiles = g['smiles']
 
-        graph_labels = f(g['y'])  # (1, N) # nb this is already unsqueezed
-        if check:  # this works iif all are fixed fields
-            # coords
-            # eg shape: (1, 66, 3)
-            assert len(coords.shape) == 3
-            B, N, D = coords.shape
-            assert B == 1
-            assert D == 3
+  graph_labels = f(g['y']) # (1, N) # nb this is already unsqueezed
+  if isinstance(graph_labels, torch.Tensor): graph_labels = graph_labels.numpy()
+  if check:  # this works iif all are fixed fields
+    # coords
+    # eg shape: (1, 66, 3)
+    assert len(coords.shape) == 3
+    B, N, D = coords.shape
+    assert B == 1
+    assert D == 3
 
-            # atom_types
-            # eg shape: (66,)
-            assert len(atom_types.shape) == 1
-            assert len(hybridization.shape) == 1
-            assert len(chirality.shape) == 1
-            assert len(is_aromatic.shape) == 1
-            assert len(is_in_ring.shape) == 1
+    # atom_types
+    # eg shape: (66,)
+    assert len(atom_types.shape) == 1
+    assert len(hybridization.shape) == 1
+    assert len(chirality.shape) == 1
+    assert len(is_aromatic.shape) == 1
+    assert len(is_in_ring.shape) == 1
 
-            assert atom_types.shape[0] == N
-            assert hybridization.shape[0] == N
-            assert chirality.shape[0] == N
-            assert is_aromatic.shape[0] == N
-            assert is_in_ring.shape[0] == N
+    assert atom_types.shape[0] == N
+    assert hybridization.shape[0] == N
+    assert chirality.shape[0] == N
+    assert is_aromatic.shape[0] == N
+    assert is_in_ring.shape[0] == N
 
-            rotable_bonds = g['rotable_bonds'].numpy()
-            dihedral_angles_degrees = g['dihedral_angles_degrees'].numpy()
+    rotable_bonds = g['rotable_bonds'].numpy()
+    dihedral_angles_degrees = g['dihedral_angles_degrees'].numpy()
 
-            # graph_labels
-            # eg shape: (1, 1)
-            # assert len(graph_labels.shape) == 2
-            # assert graph_labels.shape[0] == 1
+    # graph_labels
+    # eg shape: (1, 1)
+    # assert len(graph_labels.shape) == 2
+    # assert graph_labels.shape[0] == 1
 
-        np.savez(
-            file,
-            coords=coords,
-            atom_types=atom_types,
-            # edge_index=edge_index, # if provided it must have a batch dimension
-            # edge_attr=edge_attr,
-            graph_labels=graph_labels,
-            hybridization=hybridization,
-            chirality=chirality,
-            is_aromatic=is_aromatic,
-            is_in_ring=is_in_ring,
-            smiles=smiles,
-            rotable_bonds=rotable_bonds,
-            dihedral_angles_degrees=dihedral_angles_degrees,
-        )
+  np.savez(
+    file,
+    coords=coords,
+    atom_types=atom_types,
+    # edge_index=edge_index, # if provided it must have a batch dimension
+    # edge_attr=edge_attr,
+    graph_labels=graph_labels,
+    hybridization=hybridization,
+    chirality=chirality,
+    is_aromatic=is_aromatic,
+    is_in_ring=is_in_ring,
+    smiles=smiles,
+    rotable_bonds=rotable_bonds,
+    dihedral_angles_degrees=dihedral_angles_degrees,
+  )
+
+
+def visualize_3d_mols(mols):
+  import py3Dmol
+  from rdkit import Chem as rdChem
+  if not isinstance(mols, list): mols = [mols]
+  p = py3Dmol.view(width=1200, height=400, viewergrid=(1,3))
+  for j in range(len(mols)):
+      p.removeAllModels(viewer=(0,j))
+      p.addModel(rdChem.MolToMolBlock(mols[j], confId=0), 'sdf', viewer=(0,j))
+      p.setStyle({'stick':{}}, viewer=(0,j))
+  p.zoomTo()
+  p.show()
