@@ -14,6 +14,24 @@ import warnings
 # GENERAL UTILS #
 #################
 
+def scaffold_splitter(smile_list, frac_train: float = 0.8, frac_valid: float = 0.1, frac_test: float = 0.1, seed: int=42):
+  import deepchem as dc
+  fake_x = np.zeros(len(smile_list))
+  fake_y = np.ones(len(smile_list))
+  # creation of a deepchem dataset with the smile codes in the ids field
+  dataset = dc.data.DiskDataset.from_numpy(
+    X=fake_x,
+    y=fake_y,
+    w=np.zeros(len(smile_list)),
+    ids=smile_list
+  )
+  scaffoldsplitter = dc.splits.ScaffoldSplitter()
+  train_idxs, val_idxs, test_idxs = scaffoldsplitter.split(dataset, frac_train, frac_valid, frac_test, seed)
+  train_smiles = [smile_list[index] for index in train_idxs]
+  val_smiles = [smile_list[index] for index in val_idxs]
+  test_smiles = [smile_list[index] for index in test_idxs]
+  return train_smiles,val_smiles,test_smiles
+
 ##########
 # PARSER #
 ##########
@@ -132,7 +150,8 @@ def preprocess_mol(m:Chem.Mol,
                 ):
   if m == None: return None
   try:
-    if addHs: m = Chem.AddHs(m)
+    if addHs: m = Chem.AddHs(m, addCoords=True)
+    #! dropping is a choice, we could also merge fragments as shown in: https://youtu.be/uvhZBpdDjoM?si=8Ica5_KfwUHmyUIX&t=1455
     if drop_disconnected_components: m = max(Chem.GetMolFrags(m, asMols=True), key=lambda frag: frag.GetNumAtoms())
     if sanitize:
       error = Chem.SanitizeMol(m)
@@ -407,7 +426,7 @@ def visualize_3d_mols(mols):
   import py3Dmol
   from rdkit import Chem as rdChem
   if not isinstance(mols, list): mols = [mols]
-  p = py3Dmol.view(width=1200, height=400, viewergrid=(1,3))
+  p = py3Dmol.view(width=1500, height=400, viewergrid=(1,len(mols)))
   for j in range(len(mols)):
       p.removeAllModels(viewer=(0,j))
       p.addModel(rdChem.MolToMolBlock(mols[j], confId=0), 'sdf', viewer=(0,j))
