@@ -1,5 +1,6 @@
 
 import deepchem as dc
+# pip install deepchem
 import os
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ from random import shuffle
 
 
 def scaffold_splitter(smile_list, frac_train: float = 0.8, frac_valid: float = 0.1, frac_test: float = 0.1, seed: int=42):
+  '''https://deepchem.readthedocs.io/en/latest/api_reference/splitters.html#scaffoldsplitter'''
   fake_x = np.zeros(len(smile_list))
   fake_y = np.ones(len(smile_list))
   # creation of a deepchem dataset with the smile codes in the ids field

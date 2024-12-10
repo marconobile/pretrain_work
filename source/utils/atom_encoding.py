@@ -1,3 +1,7 @@
+'''
+code taken from: https://github.com/zrqiao/NeuralPLexer/blob/main/neuralplexer/data/molops.py#L247
+'''
+
 from rdkit import Chem
 from mendeleev.fetch import fetch_table
 import numpy as np

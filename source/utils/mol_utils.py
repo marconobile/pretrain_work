@@ -1,6 +1,7 @@
 
+import numpy as np
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, rdMolTransforms
 
 
 def get_energy(mol):
@@ -49,3 +50,17 @@ def visualize_3d_mols(mols):
       p.setStyle({'stick':{}}, viewer=(0,j))
   p.zoomTo()
   p.show()
+
+
+def get_dihedral_indices(mol):
+  # Find all dihedral angles (torsions)
+  dihedralSmarts = '[!#1]~[!#1]~[!#1]~[!#1]'
+  return [torsion for torsion in mol.GetSubstructMatches(Chem.MolFromSmarts(dihedralSmarts))]
+
+
+def get_dihedral_angles(mol):
+  # Calculate all dihedral angles
+  return np.array([
+    rdMolTransforms.GetDihedralDeg(mol.GetConformer(), dihedral[0], dihedral[1], dihedral[2], dihedral[3])
+    for dihedral in get_dihedral_indices(mol)
+  ])
