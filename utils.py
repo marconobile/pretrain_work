@@ -114,7 +114,7 @@ def addHs_and_standardize_smiles(mol):
 
     returns smiles with
     '''
-    mol = Chem.AddHs(mol)
+    mol = Chem.AddHs(mol, addCoords=True)
 
     smi = Chem.MolToSmiles(
         mol,
@@ -135,7 +135,7 @@ def print_smi_with_atom_idxs(smi):
 
     m = Chem.MolFromSmiles(smi)
     # # do opearations
-    # m = Chem.AddHs(m)
+    # m = Chem.AddHs(m, addCoords=True)
     # conf = get_conformer(m)
     # assert conf != None
 

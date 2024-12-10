@@ -57,7 +57,7 @@ def nosify_mol(data):
     '''
     dihedral_noise_tau, coords_noise_tau = 2, 0.04
     mol = Chem.MolFromSmiles(str(data.smiles))
-    mol = Chem.AddHs(mol)
+    mol = Chem.AddHs(mol, addCoords=True)
     conf = get_conformer(mol,max_attempts=10)
 
     # return data obj with noise equal to 0
@@ -131,7 +131,7 @@ def nosify_mol_print_energies(data):
     '''
     dihedral_noise_tau, coords_noise_tau = 2, 0.04
     mol = Chem.MolFromSmiles(str(data.smiles))
-    mol = Chem.AddHs(mol)
+    mol = Chem.AddHs(mol, addCoords=True)
     conf = get_conformer(mol,max_attempts=10)
 
     # return data obj with noise equal to 0
@@ -176,7 +176,7 @@ def nosify_mol_print_energies(data):
 
 
 def optimize_coords(data):
-  mol = Chem.AddHs(Chem.MolFromSmiles(str(data.smiles)))
+  mol = Chem.AddHs(Chem.MolFromSmiles(str(data.smiles)), addCoords=True)
   conf = get_conformer(mol,max_attempts=10)
   if conf == None: return data
   pre_opt_pos = conf.GetPositions()
