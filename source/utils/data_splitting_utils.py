@@ -29,6 +29,20 @@ def get_smiles_and_targets_from_csv(path):
   return smiles, y
 
 
+def parse_smiles_file(file_path):
+  """
+  Parses a .smiles file and returns a list of smiles str. (or a .txt where each line is a smile)
+  :param file_path: Path to the .smiles file
+  :return: List of smiles strings
+  """
+  smiles_list = []
+  with open(file_path, 'r') as file:
+    for line in file:
+      smiles = line.strip()
+      if smiles: smiles_list.append(smiles)
+  return smiles_list
+
+
 def get_data_folders(dir):
   return Path(dir)/'all', Path(dir)/'train', Path(dir)/'val', Path(dir)/'test'
 

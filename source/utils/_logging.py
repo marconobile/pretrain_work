@@ -19,10 +19,12 @@ def generate_file(path, filename):
       except OSError: raise f"{path_to_file} already existing and could not be removed"
   return path_to_file
 
+
 def create_log(path, name="log.txt"):
   if not name.endswith(".txt"): name += ".txt"
   generate_file(path, name)
   return os.path.join(path, name)
+
 
 def append_line_to_log(path_to_log, line):
   with open(path_to_log, "a") as log: log.write(line + "\n")

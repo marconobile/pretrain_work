@@ -4,7 +4,7 @@ import warnings
 from rdkit import Chem
 from rdkit.Chem.rdchem import HybridizationType
 import torch
-from source.utils.rdkit_mol_utils import get_torsions, GetDihedral
+from source.utils.mol_utils import get_torsions, GetDihedral
 try:
   from geqtrain.utils.torch_geometric import Data
 except ImportError:

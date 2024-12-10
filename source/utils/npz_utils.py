@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from file_handling_utils import ls
+from .file_handling_utils import ls
 from typing import List, Union
 import numpy as np
 from types import SimpleNamespace
@@ -64,6 +64,7 @@ def save_npz(pyg_mols, f, folder_name=None, N=None, check=True):
     '''
     N = N or len(pyg_mols)
     for idx in range(N): pyg2npz(pyg_mols[idx], f'{folder_name}/mol_{idx}', f)
+
 
 def pyg2npz(g, file, f,  check:bool=True):
   coords = g['pos'].unsqueeze(0).numpy()  # (1, N, 3)

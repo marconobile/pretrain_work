@@ -11,6 +11,7 @@ PPERIOD_IDS = {row["symbol"]: row["period"] for _, row in ptable.iterrows()}
 # Atom representations feature_atom ∈ R N_atom × c.
 # The input atom representation is a concatenation of one-hot encodings of element group index and period index for the given atom, which is embedded by a linear projection layer R:(18+7) → Rc
 
+
 def one_of_k_encoding(x, allowable_set):
     """
     Maps inputs not in the allowable set to the last element.
@@ -19,6 +20,7 @@ def one_of_k_encoding(x, allowable_set):
     if x not in allowable_set:
         x = allowable_set[-1]
     return list(map(lambda s: x == s, allowable_set))
+
 
 def get_atom_encoding(atom: Chem.rdchem.Atom):
     assert isinstance(atom, Chem.rdchem.Atom), f'atom must be of type Chem.rdchem.Atom but is {type(atom)}'
