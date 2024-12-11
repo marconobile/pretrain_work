@@ -1,10 +1,10 @@
-
+import torch
 import numpy as np
 import warnings
 from rdkit import Chem
 from rdkit.Chem.rdchem import HybridizationType
-import torch
-from source.utils.mol_utils import get_torsions, GetDihedral
+from source.utils.atom_encoding import periodic_table_group, periodic_table_period
+from source.data_transforms.utils import get_torsions, GetDihedral
 try:
   from geqtrain.utils.torch_geometric import Data
 except ImportError:
@@ -22,7 +22,7 @@ def mols2pyg_list(mols, ys, atom2int):
   return pyg_mols
 
 
-def mol2pyg(mol, types, minimize:bool=True):
+def mol2pyg(mol):
     '''
     either returns data pyg data obj or None if some operations are not possible
     IMPO: this does not set y
@@ -32,10 +32,24 @@ def mol2pyg(mol, types, minimize:bool=True):
 
     # if minimize: mol = optimize_coords(mol, conf)
 
-    type_idx, aromatic, is_in_ring, _hybridization, chirality = [], [], [], [], []
-    for atom in mol.GetAtoms():
+    aromatic, is_in_ring, _hybridization, chirality = [], [], [], []
+    pos,group, period = [], [], []
+    num_atoms = mol.GetNumAtoms()
+    adj_matrix = np.zeros((num_atoms, num_atoms), dtype=int)
+    for i, atom in enumerate(mol.GetAtoms()):
+      assert atom.GetIdx() == i
 
-      type_idx.append(types[atom.GetSymbol()])
+      for neighbor in atom.GetNeighbors():
+        neighbor_idx = neighbor.GetIdx()
+        adj_matrix[i, neighbor_idx] = 1
+        adj_matrix[neighbor_idx, i] = 1
+
+      group.append(periodic_table_group(atom))
+      period.append(periodic_table_period(atom))
+
+      positions = conf.GetAtomPosition(i)
+      pos.append((positions.x, positions.y, positions.z))
+
       aromatic.append(1 if atom.GetIsAromatic() else 0)
       is_in_ring.append(1 if atom.IsInRing() else 0)
       # https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html#rdkit.Chem.rdchem.ChiralType
@@ -50,8 +64,10 @@ def mol2pyg(mol, types, minimize:bool=True):
 
     rotable_bonds = get_torsions([mol])
     return Data(
-      z=torch.tensor(type_idx),
-      pos=torch.tensor(conf.GetPositions(), dtype=torch.float32),
+      adj_matrix=torch.tensor(adj_matrix),
+      group=torch.tensor(group),
+      period=torch.tensor(period),
+      pos=torch.tensor(pos, dtype=torch.float32),
       smiles=Chem.MolToSmiles(mol),
       hybridization=torch.tensor(_hybridization, dtype=torch.long),
       is_aromatic=torch.tensor(aromatic, dtype=torch.long),

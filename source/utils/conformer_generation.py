@@ -80,7 +80,6 @@ def generate_conformers(smi, N:int=10):
 
   # try to get conf, if error then drop the mol, careful with indices
   mol_ensemble = [m for m in tmp_mol_ensemble if m.GetConformer() !=-1]
-  print(len(mol_ensemble))
   if len(mol_ensemble) < N: return mol_ensemble
 
   dihedral_fingerprints = [get_dihedral_angles(mol) for mol in mol_ensemble]

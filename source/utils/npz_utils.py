@@ -69,7 +69,8 @@ def save_npz(pyg_mols, f, folder_name=None, N=None, check=True):
 def pyg2npz(g, file, f,  check:bool=True):
   coords = g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
   # in general: if fixed field it must be (N,), else (1, N)
-  atom_types = g['z'].numpy()
+  group = g['group'].numpy()
+  period = g['period'].numpy()
   # edge_index = g['edge_index'].unsqueeze(0).numpy() # (1, 2, E)
   # edge_attr = g['edge_attr'].unsqueeze(0).numpy() # (1, E, Edg_attr_dims)
   hybridization = g['hybridization'].numpy()  # (N, )
@@ -113,7 +114,8 @@ def pyg2npz(g, file, f,  check:bool=True):
   np.savez(
     file,
     coords=coords,
-    atom_types=atom_types,
+    group=group,
+    period=period,
     # edge_index=edge_index, # if provided it must have a batch dimension
     # edge_attr=edge_attr,
     graph_labels=graph_labels,
