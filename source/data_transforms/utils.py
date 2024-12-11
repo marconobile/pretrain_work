@@ -19,42 +19,6 @@ def GetDihedral(conf, atom_idx):
   return rdMolTransforms.GetDihedralDeg(conf, atom_idx[0], atom_idx[1], atom_idx[2], atom_idx[3])
 
 
-# def SetDihedral(conf, atom_idx, new_val):
-#   """
-#   Sets the value of a dihedral angle (torsion) in a molecule's conformation.
-
-#   This function modifies the dihedral angle defined by four atoms in the given molecule conformation to the specified value.
-
-#   Args:
-#       conf (RDKit Conformer): The conformation of the molecule.
-#       atom_idx (tuple): A tuple of four integers representing the indices of the atoms that define the dihedral angle.
-#       new_val (float): The new value of the dihedral angle in degrees.
-
-#   """
-#   # rdMolTransforms.SetDihedralDeg(conf, atom_idx[0], atom_idx[1], atom_idx[2], atom_idx[3], new_val)
-#   try:
-#     rdMolTransforms.SetDihedralDeg(conf, atom_idx[0], atom_idx[1], atom_idx[2], atom_idx[3], new_val)
-#   except:
-#     rdMolTransforms.SetDihedralDeg(conf, atom_idx[1], atom_idx[0], atom_idx[2], atom_idx[3], new_val)
-#     # print('--------- dihedral idxs were swapped ---------')
-
-
-# def apply_changes(mol, values, rotable_bonds):
-#   """
-#   Applies specified dihedral angle changes to a molecule based on the provided values for the dihedral angles.
-
-#   Args:
-#       mol (RDKit Mol): The original molecule to which the changes will be applied.
-#       values (list of float): A list of new values for the dihedral angles in degrees.
-#       rotable_bonds (list of tuple): A list of tuples, where each tuple contains four integers representing
-#                                       the indices of the atoms that define a rotatable bond.
-
-#   Returns:
-#       None: modifies inplace the input mol (RDKit Mol)
-#   """
-#   [SetDihedral(mol.GetConformer(), rotable_bonds[r], values[r].item()) for r in range(len(rotable_bonds))]
-
-
 def get_torsions(mol_list):
     """
     Extracts the torsion angles (dihedrals) from a list of molecules.

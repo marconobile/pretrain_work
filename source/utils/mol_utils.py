@@ -1,7 +1,10 @@
 
 import numpy as np
 from rdkit import Chem
+from rdkit.Geometry import Point3D
 from rdkit.Chem import AllChem, rdMolTransforms
+import torch
+from copy import deepcopy
 
 
 def get_energy(mol):
@@ -64,3 +67,12 @@ def get_dihedral_angles(mol):
     rdMolTransforms.GetDihedralDeg(mol.GetConformer(), dihedral[0], dihedral[1], dihedral[2], dihedral[3])
     for dihedral in get_dihedral_indices(mol)
   ])
+
+
+def set_coords(mol, coords: torch.tensor):
+  new_mol = deepcopy(mol)
+  conf = new_mol.GetConformer()
+  for i in range(new_mol.GetNumAtoms()):
+    x,y,z = coords[i][0].item(), coords[i][1].item(), coords[i][2].item()
+    conf.SetAtomPosition(i, Point3D(x,y,z))
+  return new_mol

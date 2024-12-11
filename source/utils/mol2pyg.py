@@ -27,11 +27,7 @@ def mol2pyg(mol):
     either returns data pyg data obj or None if some operations are not possible
     IMPO: this does not set y
     '''
-    conf = mol.GetConformer() # get_conformer(mol)
-    if conf == None: return None
-
-    # if minimize: mol = optimize_coords(mol, conf)
-
+    conf = mol.GetConformer()
     aromatic, is_in_ring, _hybridization, chirality = [], [], [], []
     pos,group, period = [], [], []
     num_atoms = mol.GetNumAtoms()
