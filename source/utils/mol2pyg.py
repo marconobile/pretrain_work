@@ -4,6 +4,7 @@ import warnings
 from rdkit import Chem
 from rdkit.Chem.rdchem import HybridizationType
 from source.utils.atom_encoding import periodic_table_group, periodic_table_period
+from source.utils.mol_utils import smi_writer_params
 from source.data_transforms.utils import get_torsions, GetDihedral
 try:
   from geqtrain.utils.torch_geometric import Data
@@ -12,17 +13,17 @@ except ImportError:
   warnings.warn("Warning: using torch_geometric lib instead of geqtrain.utils.torch_geometric")
 
 
-def mols2pyg_list(mols, ys, atom2int):
-  pyg_mols = []
-  for m, y in zip(mols, ys):
-    pyg_m = mol2pyg(m, atom2int)
-    if pyg_m == None: continue
-    pyg_m.y = np.array(y, dtype=np.float32)
-    pyg_mols.append(pyg_m)
-  return pyg_mols
+# def mols2pyg_list(mols, ys, atom2int):
+#   pyg_mols = []
+#   for m, y in zip(mols, ys):
+#     pyg_m = mol2pyg(m, atom2int)
+#     if pyg_m == None: continue
+#     pyg_m.y = np.array(y, dtype=np.float32)
+#     pyg_mols.append(pyg_m)
+#   return pyg_mols
 
 
-def mol2pyg(mol):
+def mol2pyg(mol, max_energy:float=0.0):
     '''
     either returns data pyg data obj or None if some operations are not possible
     IMPO: this does not set y
@@ -59,12 +60,13 @@ def mol2pyg(mol):
       _hybridization.append(hybridization_value)
 
     rotable_bonds = get_torsions([mol])
+    # TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
     return Data(
       adj_matrix=torch.tensor(adj_matrix),
       group=torch.tensor(group),
       period=torch.tensor(period),
       pos=torch.tensor(pos, dtype=torch.float32),
-      smiles=Chem.MolToSmiles(mol),
+      smiles=Chem.MolToSmiles(mol, smi_writer_params()),
       hybridization=torch.tensor(_hybridization, dtype=torch.long),
       is_aromatic=torch.tensor(aromatic, dtype=torch.long),
       is_in_ring=torch.tensor(is_in_ring, dtype=torch.long),
@@ -72,4 +74,5 @@ def mol2pyg(mol):
       rotable_bonds=torch.tensor(rotable_bonds, dtype=torch.long),
       dihedral_angles_degrees=torch.tensor(
           [GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds], dtype=torch.float32),
+      max_energy=max_energy, # max energy across all sampled conformers of input mol
     )

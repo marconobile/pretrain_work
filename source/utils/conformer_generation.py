@@ -46,26 +46,26 @@ def generate_conformers(smi, N:int=10):
   '''
   N: num of conformers to select
   '''
-  def get_conformer_generator():
+  def get_conformer_generator(N):
     # Settings
     max_time = 36000 # Max. allowed molecule processing time in seconds (default: 3600 sec)
     min_rmsd = 0.5 # Output conformer RMSD threshold (default: 0.5)
     e_window = 20.0 # Output conformer energy window (default: 20.0)
-    max_confs = 100 # Max. output ensemble size (default: 100)
+    # max_confs = 100 # Max. output ensemble size (default: 100)
 
     # create and initialize an instance of the class ConfGen.ConformerGenerator which
     # will perform the actual conformer ensemble generation work
     conf_gen = ConfGen.ConformerGenerator()
-    conf_gen.settings.timeout = max_time * 1000          # apply the -t argument
+    conf_gen.settings.timeout = max_time * 10000000      # apply the -t argument
     conf_gen.settings.minRMSD = min_rmsd                 # apply the -r argument
     conf_gen.settings.energyWindow = e_window            # apply the -e argument
-    conf_gen.settings.maxNumOutputConformers = max_confs # apply the -n argument
+    conf_gen.settings.maxNumOutputConformers = N # apply the -n argument
     return conf_gen
 
   mol = CDPLChem.parseSMILES(smi)
   try:
       # generate conformer ensemble for read molecule
-      status, num_confs = generateConformationEnsembles(mol, get_conformer_generator())
+      status, num_confs = generateConformationEnsembles(mol, get_conformer_generator(N))
 
       # output generated ensemble (if available)
       if num_confs > 0:
@@ -92,7 +92,7 @@ def generate_conformers(smi, N:int=10):
           dot_product_matrix[i, j] = np.dot(dihedral_fingerprints[i], dihedral_fingerprints[j])
           dot_product_matrix[j, i] = dot_product_matrix[i, j]
 
-  # Get the indices of the 5 lowest values
+  # Get the indices of the N lowest values
   sum_of_dot_prods = dot_product_matrix.sum(-1)
   sorted_indices = np.argsort(sum_of_dot_prods)
   lowest_indices = sorted_indices[:N]

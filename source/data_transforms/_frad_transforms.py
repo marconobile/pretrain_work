@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+from rdkit import Chem
+from source.utils.mol_utils import smi_reader_params, get_energy, set_coords
 
 
 def do_not_nosify_mol(data):
@@ -105,21 +107,45 @@ def apply_all_dihedrals(coords, rotable_bonds, original_dihedral_angles_degrees,
   return coords
 
 
-def frad(data, dihedral_noise_tau=2.0,coords_noise_tau=0.04):
-  #TODO: make multiscale via partial
+def apply_dihedral_noise(data, scale):
+  '''sample and apply dihedral noise'''
   rotable_bonds = data.rotable_bonds.tolist()
-  if rotable_bonds:
-    # get, apply and set dihedral noise
-    original_dihedral_angles_degrees = data.dihedral_angles_degrees
-    noised_dihedral_angles_degrees = original_dihedral_angles_degrees + np.random.normal(0, 1, size=original_dihedral_angles_degrees.shape) * dihedral_noise_tau
-    coords = apply_all_dihedrals(data.pos,
-                                 rotable_bonds,
-                                 original_dihedral_angles_degrees,
-                                 noised_dihedral_angles_degrees.float(),
-                                 data.adj_matrix,
-                                )
-  # get, apply and set coords noise
-  pos_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * coords_noise_tau
-  data.pos = torch.tensor(coords + pos_noise_to_be_predicted, dtype=torch.float)
-  data.noise_target = torch.tensor(pos_noise_to_be_predicted, dtype=torch.float)
+  if not rotable_bonds: return data
+  original_dihedral_angles_degrees = data.dihedral_angles_degrees
+
+  # sample and clip to [-180.0, +180.0]
+  noise = np.random.normal(0, scale, size=original_dihedral_angles_degrees.shape)
+  noise = np.clip(noise, a_min=-180.0, a_max=180.0)
+
+  noised_dihedral_angles_degrees = original_dihedral_angles_degrees + noise
+  coords = apply_all_dihedrals(data.pos,
+                                rotable_bonds,
+                                original_dihedral_angles_degrees,
+                                noised_dihedral_angles_degrees.float(),
+                                data.adj_matrix,
+                              )
+  return coords
+
+
+def apply_coords_noise(coords, coords_noise_tau):
+  '''sample and return coords noise'''
+  coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * coords_noise_tau
+  update_coords = torch.tensor(coords + coords_noise_to_be_predicted, dtype=torch.float)
+  return update_coords, coords_noise_to_be_predicted
+
+
+def frad(data, coords_noise_tau=0.04, dihedral_scale=40.0, k=2): #! impo hyperparams here
+  #! this function modifies data inplace
+  #TODO: make multiscale via partial
+  while True:
+    # sample from starting-conformer
+    coords = apply_dihedral_noise(data, dihedral_scale)
+    mol = Chem.MolFromSmiles(data.smiles, smi_reader_params()) # to be kept inside the while to avoid "energy" locks
+    mol = set_coords(mol, coords)
+    # if energy above T: resample
+    if get_energy(mol) <= k*data.max_energy: break
+
+  update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, coords_noise_tau)
+  data.pos = update_coords
+  data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float)
   return data
