@@ -42,16 +42,17 @@ def generateConformationEnsembles(mol: Chem.BasicMolecule, conf_gen: ConfGen.Con
   return (status, num_confs)
 
 
-def generate_conformers(smi, N:int=10):
-  '''
-  N: num of conformers to select
-  '''
-  def get_conformer_generator(N):
+def get_conformer_generator(N:int):
+    '''
+    N: num of conformers to select
+    The parameters min_rmsd, e_window, and max_confs are used to control the generated conformer ensemble's diversity, energy and size.
+    https://cdpkit.org/v1.1.1/applications/confgen.html
+    '''
     # Settings
     max_time = 36000 # Max. allowed molecule processing time in seconds (default: 3600 sec)
     min_rmsd = 0.5 # Output conformer RMSD threshold (default: 0.5)
     e_window = 20.0 # Output conformer energy window (default: 20.0)
-    # max_confs = 100 # Max. output ensemble size (default: 100)
+    max_confs = N # Max. output ensemble size (default: 100)
 
     # create and initialize an instance of the class ConfGen.ConformerGenerator which
     # will perform the actual conformer ensemble generation work
@@ -59,13 +60,15 @@ def generate_conformers(smi, N:int=10):
     conf_gen.settings.timeout = max_time * 10000000      # apply the -t argument
     conf_gen.settings.minRMSD = min_rmsd                 # apply the -r argument
     conf_gen.settings.energyWindow = e_window            # apply the -e argument
-    conf_gen.settings.maxNumOutputConformers = N # apply the -n argument
+    conf_gen.settings.maxNumOutputConformers = max_confs # apply the -n argument
     return conf_gen
 
+def generate_conformers(smi:str, conf_gen:ConfGen.ConformerGenerator):
+  N = conf_gen.settings.maxNumOutputConformers
   mol = CDPLChem.parseSMILES(smi)
   try:
       # generate conformer ensemble for read molecule
-      status, num_confs = generateConformationEnsembles(mol, get_conformer_generator(N))
+      status, num_confs = generateConformationEnsembles(mol, conf_gen)
 
       # output generated ensemble (if available)
       if num_confs > 0:
