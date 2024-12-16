@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from rdkit import Chem
 from source.utils.mol_utils import smi_reader_params, get_energy, set_coords
-
+import random
 
 def do_not_nosify_mol(data):
   data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
@@ -127,25 +127,44 @@ def apply_dihedral_noise(data, scale):
   return coords
 
 
-def apply_coords_noise(coords, coords_noise_tau):
+def apply_coords_noise(coords): #, coords_noise_tau):
   '''sample and return coords noise'''
-  coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * coords_noise_tau
+  coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * coord_noise() #* coords_noise_tau
   update_coords = torch.tensor(coords + coords_noise_to_be_predicted, dtype=torch.float)
   return update_coords, coords_noise_to_be_predicted
 
 
-def frad(data, coords_noise_tau=0.04, dihedral_scale=40.0, k=2): #! impo hyperparams here
-  #! this function modifies data inplace
-  #TODO: make multiscale via partial
+def coord_noise(linspace_start:float=0.1, linspace_end:float=0.001, int_start:int=1, int_end:int=5, steps:int = 100):
+    '''returns a random value between 0.5 and 0.001 if using defaults'''
+    # 1. Create a linspace from linspace_start to linspace_end
+    linspace = torch.linspace(linspace_start, linspace_end, steps=steps)
+
+    # 2. Sample randomly 1 value out of the above-created linspace
+    linspace_sample = random.choice(linspace.tolist())
+
+    # 3. Sample uniformly an integer between int_start and int_end
+    int_sample = random.randint(int_start, int_end)
+
+    # 4. Multiply the sampled values
+    result = linspace_sample * int_sample
+
+    return result
+
+
+def frad(data, dihedral_scale:float=40.0, k:int=2): #! hyperparams here
+  '''
+  modifies data inplace
+  dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
+  k: if (energy of noised conformer) > (k*|energy_min - energy_max|): resample
+  '''
   while True:
     # sample from starting-conformer
     coords = apply_dihedral_noise(data, dihedral_scale)
     mol = Chem.MolFromSmiles(data.smiles, smi_reader_params()) # to be kept inside the while to avoid "energy" locks
     mol = set_coords(mol, coords)
-    # if energy above T: resample
     if get_energy(mol) <= k*data.max_energy: break
 
-  update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, coords_noise_tau)
+  update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords)
   data.pos = update_coords
   data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float)
   return data
