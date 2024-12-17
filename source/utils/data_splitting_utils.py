@@ -24,6 +24,7 @@ def scaffold_splitter(smile_list, frac_train: float = 0.8, frac_valid: float = 0
 
 def get_smiles_and_targets_from_csv(path):
   '''the csv here processed have only 2 cols, where it is assumed that first col is smiles and second col is label'''
+  assert path.endswith(".csv"), f"{path} is not a valid .csv file"
   dset = pd.read_csv(path)
   smi_key, target_key = list(dset.keys())
   smiles, y  = dset[smi_key].to_list(), dset[target_key].to_list()

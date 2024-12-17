@@ -13,22 +13,24 @@ except ImportError:
   warnings.warn("Warning: using torch_geometric lib instead of geqtrain.utils.torch_geometric")
 
 
-# def mols2pyg_list(mols, ys, atom2int):
-#   pyg_mols = []
-#   for m, y in zip(mols, ys):
-#     pyg_m = mol2pyg(m, atom2int)
-#     if pyg_m == None: continue
-#     pyg_m.y = np.array(y, dtype=np.float32)
-#     pyg_mols.append(pyg_m)
-#   return pyg_mols
+def mols2pyg_list_with_targets(mols, smiles, ys, **mol2pyg_kwargs):
+  pyg_mols = []
+  for m, s, y in zip(mols, smiles, ys):
+    pyg_m = mol2pyg(m, s, **mol2pyg_kwargs)
+    if pyg_m == None: raise ValueError('Error in casting mol to pyg') # continue
+    pyg_m.y = np.array(y, dtype=np.float32)
+    pyg_mols.append(pyg_m)
+  return pyg_mols
 
 
-def mol2pyg(mol, max_energy:float=0.0):
+def mol2pyg(mol, smi, max_energy:float=0.0):
     '''
-    either returns data pyg data obj or None if some operations are not possible
+    IMPO: do not trust smiles: given smi -> get MOL -> addHs -> do work. Then for any other place where you need to act on MOL, restart from input smi and repeat smi -> get MOL -> addHs -> do work
     IMPO: this does not set y
+
+    returns: pyg data obj or None if some operations are not possible
     '''
-    conf = mol.GetConformer()
+    conf = mol.GetConformer() # ToDo: ok iff sensible conformer has been already generated and setted
     aromatic, is_in_ring, _hybridization, chirality = [], [], [], []
     pos,group, period = [], [], []
     num_atoms = mol.GetNumAtoms()
@@ -66,7 +68,7 @@ def mol2pyg(mol, max_energy:float=0.0):
       group=torch.tensor(group),
       period=torch.tensor(period),
       pos=torch.tensor(pos, dtype=torch.float32),
-      smiles=Chem.MolToSmiles(mol, smi_writer_params()),
+      smiles=smi, #Chem.MolToSmiles(mol, smi_writer_params()),
       hybridization=torch.tensor(_hybridization, dtype=torch.long),
       is_aromatic=torch.tensor(aromatic, dtype=torch.long),
       is_in_ring=torch.tensor(is_in_ring, dtype=torch.long),

@@ -90,7 +90,7 @@ def set_dihedral_angle(coords, i, j, k, l, current_angle_deg, desired_angle_deg,
   """
   # Convert the difference to radians before performing the rotation
   angle_diff = desired_angle_deg - current_angle_deg
-  angle_diff_rad = torch.deg2rad(torch.tensor(angle_diff, dtype=coords.dtype, device=coords.device))
+  angle_diff_rad = torch.deg2rad(angle_diff.clone().detach())
 
   # Find downstream atoms
   downstream_atoms = find_downstream_atoms(adjacency_matrix, j, k)
@@ -129,8 +129,8 @@ def apply_dihedral_noise(data, scale):
 
 def apply_coords_noise(coords): #, coords_noise_tau):
   '''sample and return coords noise'''
-  coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * coord_noise() #* coords_noise_tau
-  update_coords = torch.tensor(coords + coords_noise_to_be_predicted, dtype=torch.float)
+  coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) *0 #* coord_noise() #* coords_noise_tau
+  update_coords = coords + coords_noise_to_be_predicted
   return update_coords, coords_noise_to_be_predicted
 
 
@@ -151,7 +151,7 @@ def coord_noise(linspace_start:float=0.1, linspace_end:float=0.001, int_start:in
     return result
 
 
-def frad(data, dihedral_scale:float=40.0, k:int=2): #! hyperparams here
+def frad(data, dihedral_scale:float=0.0, k:int=10): #! hyperparams here
   '''
   modifies data inplace
   dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
@@ -161,7 +161,9 @@ def frad(data, dihedral_scale:float=40.0, k:int=2): #! hyperparams here
     # sample from starting-conformer
     coords = apply_dihedral_noise(data, dihedral_scale)
     mol = Chem.MolFromSmiles(data.smiles, smi_reader_params()) # to be kept inside the while to avoid "energy" locks
+    mol = Chem.AddHs(mol, addCoords=True)
     mol = set_coords(mol, coords)
+    print(get_energy(mol), k*data.max_energy)
     if get_energy(mol) <= k*data.max_energy: break
 
   update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords)

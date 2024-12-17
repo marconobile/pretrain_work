@@ -1,30 +1,34 @@
 
 import numpy as np
-from rdkit import Chem
+from rdkit import Chem as rdChem
 from rdkit.Geometry import Point3D
 from rdkit.Chem import AllChem, rdMolTransforms
 import torch
 from copy import deepcopy
+import warnings
 
 
-# def get_conformer(mol, max_attempts:int=10):
-#     # TODO: create multithread version of this via https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMultipleConfs
-#     try:
-#         out = mol.GetConformer() # if fails mol needs to be embedded
-#         return out if out != -1 else None
-#     except:
-#         try:
-#             success = AllChem.EmbedMolecule(mol,
-#                                             useRandomCoords=True, # needs to be T
-#                                             useSmallRingTorsions=True,
-#                                             useMacrocycleTorsions=True,
-#                                             maxAttempts=max_attempts
-#                                           ) != -1
-#             if success:
-#                 out = mol.GetConformer() # if mol embedding worked should be ok
-#                 return out if out != -1 else None
-#         except: return None
-#     return None
+def get_rdkit_conformer(mol, max_attempts:int=10):
+    '''
+    if returns none: mols not embeddable
+    '''
+    # TODO: create multithread version of this via https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMultipleConfs
+    try:
+        conf = mol.GetConformer() # if fails mol needs to be embedded
+        return conf if conf != -1 else None
+    except:
+        try:
+            success = AllChem.EmbedMolecule(mol,
+                                            useRandomCoords=True, # needs to be T
+                                            useSmallRingTorsions=True,
+                                            useMacrocycleTorsions=True,
+                                            maxAttempts=max_attempts
+                                          ) != -1
+            if success:
+                conf = mol.GetConformer() # if mol embedding worked should be ok
+                return conf if conf != -1 else None
+        except: return None
+    return None
 
 
 def smi_writer_params():
@@ -42,7 +46,7 @@ def smi_writer_params():
   bool 	includeDativeBonds
   bool 	ignoreAtomMapNumbers = false
   '''
-  writer_params = Chem.SmilesWriteParams()
+  writer_params = rdChem.SmilesWriteParams()
   writer_params.doIsomericSmiles = True
   writer_params.allHsExplicit = True
   return writer_params
@@ -61,8 +65,8 @@ def smi_reader_params():
   bool 	removeHs = true
   bool 	skipCleanup = false
   '''
-  params = Chem.SmilesParserParams()
-  params.removeHs = False
+  params = rdChem.SmilesParserParams()
+  params.removeHs = False # if input smi did not have hs then parsed smi will not have hs
   params.parseName = False
   return params
 
@@ -71,8 +75,9 @@ def get_energy(mol):
   '''
   RDKit performs energy minimization of mol conformation using the Merck Molecular Force Field (MMFF94).
   kilocalories per mole (kcal/mol)  energies are reported in kcal mol-1.
+  If not_converged is 0 the optimization converged for that conformer.
   '''
-  converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, maxIters=0)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
+  not_converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, maxIters=0)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
   return energy
 
 
@@ -81,35 +86,61 @@ def minimize_energy(mol):
   RDKit performs energy minimization of mol conformation using the Merck Molecular Force Field (MMFF94).
   kilocalories per mole (kcal/mol)  energies are reported in kcal mol-1.
   mol is changed in place
+  If not_converged is 0 the optimization converged for that conformer.
   '''
-  converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, numThreads=1, maxIters=500)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
+  # todo: add check on mol conformers: if mol has no conformers then this fuction cannot be executed
+  not_converged = True
+  attempts = 0
+  while not_converged:
+    not_converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, numThreads=2)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
+    attempts +=1
+    if attempts == 10:
+      warnings.warn("returning before reaching convergence")
+      return mol, energy
   return mol, energy
 
 
-def preprocess_mol(m:Chem.Mol,
+def drop_disconnected_components(inpt):
+  '''
+  the assumption here is that the largest fragment is always the mol desired
+  '''
+  if isinstance(inpt, rdChem.Mol): return max(rdChem.GetMolFrags(inpt, asMols=True), key=lambda frag: frag.GetNumAtoms())
+  elif isinstance(inpt, str): return max(inpt.split('.'), key=len)
+  raise ValueError(f"inpt type {type(inpt)} not supported, it must be str or rdkit mol")
+
+
+def preprocess_mol(m:rdChem.Mol,
                   sanitize:bool=True,
                   addHs:bool=True,
-                  drop_disconnected_components:bool=True
+                  _drop_disconnected_components:bool=True
                 ):
   if m == None: return None
   try:
-    if addHs: m = Chem.AddHs(m, addCoords=True)
+    if addHs: m = rdChem.AddHs(m, addCoords=True)
     #! dropping is a choice, we could also merge fragments as shown in: https://youtu.be/uvhZBpdDjoM?si=8Ica5_KfwUHmyUIX&t=1455
-    if drop_disconnected_components: m = max(Chem.GetMolFrags(m, asMols=True), key=lambda frag: frag.GetNumAtoms())
+    if _drop_disconnected_components: m = drop_disconnected_components(m)
     if sanitize:
-      error = Chem.SanitizeMol(m)
+      error = rdChem.SanitizeMol(m)
       if error: return None
   except: return None
   return m
 
 
-def visualize_3d_mols(mols):
+def visualize_3d_mols(mols, drawing_style:str='stick'):
   import py3Dmol
+  drawing_style_options =[
+    "line", # Wire Model
+    "cross", # Cross Model
+    "stick", # Bar Model
+    "sphere", # Space Filling Model
+    "cartoon", # Display secondary structure in manga
+  ]
+  assert drawing_style in drawing_style_options
   if not isinstance(mols, list): mols = [mols]
-  p = py3Dmol.view(width=1500, height=400, viewergrid=(1,len(mols)))
+  p = py3Dmol.view(width=1500, height=400, viewergrid=(1,len(mols))) # todo expose these
   for j in range(len(mols)):
       p.removeAllModels(viewer=(0,j))
-      p.addModel(Chem.MolToMolBlock(mols[j], confId=0), 'sdf', viewer=(0,j))
+      p.addModel(rdChem.MolToMolBlock(mols[j], confId=0), 'sdf', viewer=(0,j))
       p.setStyle({'stick':{}}, viewer=(0,j))
   p.zoomTo()
   p.show()
@@ -118,7 +149,7 @@ def visualize_3d_mols(mols):
 def get_dihedral_indices(mol):
   # Find all dihedral angles (torsions)
   dihedralSmarts = '[!#1]~[!#1]~[!#1]~[!#1]'
-  return [torsion for torsion in mol.GetSubstructMatches(Chem.MolFromSmarts(dihedralSmarts))]
+  return [torsion for torsion in mol.GetSubstructMatches(rdChem.MolFromSmarts(dihedralSmarts))]
 
 
 def get_dihedral_angles(mol):
@@ -131,7 +162,7 @@ def get_dihedral_angles(mol):
 
 def set_coords(mol, coords: torch.tensor):
   new_mol = deepcopy(mol)
-  conf = Chem.rdchem.Conformer(new_mol.GetNumAtoms()) # create empty rdkit Conformer
+  conf = rdChem.rdchem.Conformer(new_mol.GetNumAtoms()) # create empty rdkit Conformer
   for i in range(new_mol.GetNumAtoms()):
     x,y,z = coords[i][0].item(), coords[i][1].item(), coords[i][2].item()
     conf.SetAtomPosition(i, Point3D(x,y,z))

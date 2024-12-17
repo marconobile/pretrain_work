@@ -29,8 +29,15 @@ def get_field_from_npzs(path:str, field:Union[str, List]='*'):
   return out
 
 
-def save_npz(pyg_mols, f, folder_name=None, N=None, check=True):
+def save_npz(pyg_mols, f:callable=None, folder_name:str=None, N:int=None, check=True, idx:int=0):
     '''
+    pyg_mols: list of pytorch geometric data objects
+    f: func to apply to each g['y'], more below
+    folder_name: name of the npz
+    N how many npz to write out of the pyg_mols
+    check: whether to check or not for shapes when saving the npz
+    idx: int from where to start to save in f'{folder_name}/mol_{idx}'
+
     no further processing of folder
     f: lambda function that defines how to treat the target value, examples:
 
@@ -62,11 +69,14 @@ def save_npz(pyg_mols, f, folder_name=None, N=None, check=True):
     is_in_ring
     (5,)
     '''
-    N = N or len(pyg_mols)
-    for idx in range(N): pyg2npz(pyg_mols[idx], f'{folder_name}/mol_{idx}', f)
+    if N: pyg_mols = pyg_mols[:N]
+    for pyg_m in pyg_mols:
+      save_pyg_as_npz(pyg_m, f'{folder_name}/mol_{idx}', f, check)
+      idx +=1
+    return idx
 
 
-def pyg2npz(g, file, f,  check:bool=True):
+def save_pyg_as_npz(g, file, f:callable=None, check:bool=True):
   coords = g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
   # in general: if fixed field it must be (N,), else (1, N)
   group = g['group'].numpy()
@@ -79,7 +89,7 @@ def pyg2npz(g, file, f,  check:bool=True):
   is_in_ring = g['is_in_ring'].numpy()  # (N, )
   smiles = g['smiles']
 
-  graph_labels = f(g['y']) # (1, N) # nb this is already unsqueezed
+  graph_labels = f(g['y']) if f else None # (1, N) # nb this is already unsqueezed
   if isinstance(graph_labels, torch.Tensor): graph_labels = graph_labels.numpy()
   if check:  # this works iif all are fixed fields
     # coords
@@ -91,13 +101,16 @@ def pyg2npz(g, file, f,  check:bool=True):
 
     # atom_types
     # eg shape: (66,)
-    assert len(atom_types.shape) == 1
+    # assert len(atom_types.shape) == 1
+    assert len(group.shape) == 1
+    assert len(period.shape) == 1
+
     assert len(hybridization.shape) == 1
     assert len(chirality.shape) == 1
     assert len(is_aromatic.shape) == 1
     assert len(is_in_ring.shape) == 1
 
-    assert atom_types.shape[0] == N
+    # assert atom_types.shape[0] == N
     assert hybridization.shape[0] == N
     assert chirality.shape[0] == N
     assert is_aromatic.shape[0] == N
@@ -111,21 +124,42 @@ def pyg2npz(g, file, f,  check:bool=True):
     # assert len(graph_labels.shape) == 2
     # assert graph_labels.shape[0] == 1
 
-  np.savez(
-    file,
-    coords=coords,
-    group=group,
-    period=period,
-    # edge_index=edge_index, # if provided it must have a batch dimension
-    # edge_attr=edge_attr,
-    graph_labels=graph_labels,
-    hybridization=hybridization,
-    chirality=chirality,
-    is_aromatic=is_aromatic,
-    is_in_ring=is_in_ring,
-    smiles=smiles,
-    rotable_bonds=rotable_bonds,
-    dihedral_angles_degrees=dihedral_angles_degrees,
-  )
+  # TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
+  data = {
+      "coords": coords,
+      "group": group,
+      "period": period,
+      "graph_labels": graph_labels,
+      "hybridization": hybridization,
+      "chirality": chirality,
+      "is_aromatic": is_aromatic,
+      "is_in_ring": is_in_ring,
+      "smiles": smiles,
+      "rotable_bonds": rotable_bonds,
+      "dihedral_angles_degrees": dihedral_angles_degrees,
+  }
+
+  # Filter out the None values
+  filtered_data = {k: v for k, v in data.items() if v is not None}
+
+  # Save the data using np.savez
+  np.savez(file=file, **filtered_data)
+
+  # np.savez(
+  #   file,
+  #   coords=coords,
+  #   group=group,
+  #   period=period,
+  #   # edge_index=edge_index, # if provided it must have a batch dimension
+  #   # edge_attr=edge_attr,
+  #   graph_labels=graph_labels,
+  #   hybridization=hybridization,
+  #   chirality=chirality,
+  #   is_aromatic=is_aromatic,
+  #   is_in_ring=is_in_ring,
+  #   smiles=smiles,
+  #   rotable_bonds=rotable_bonds,
+  #   dihedral_angles_degrees=dihedral_angles_degrees,
+  # )
 
 
