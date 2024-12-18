@@ -1,16 +1,28 @@
 import torch
 import numpy as np
 import warnings
-from rdkit import Chem
+from rdkit import Chem as rdChem
 from rdkit.Chem.rdchem import HybridizationType
 from source.utils.atom_encoding import periodic_table_group, periodic_table_period
-from source.utils.mol_utils import smi_writer_params
+from source.utils.mol_utils import smi_reader_params, smi_writer_params, set_coords
 from source.data_transforms.utils import get_torsions, GetDihedral
 try:
   from geqtrain.utils.torch_geometric import Data
 except ImportError:
   from torch_geometric.data import Data
   warnings.warn("Warning: using torch_geometric lib instead of geqtrain.utils.torch_geometric")
+
+
+def pyg2mol(pyg): return set_coords(rdChem.AddHs(rdChem.MolFromSmiles(pyg.smiles, smi_reader_params())), pyg.pos)
+
+
+def mols2pyg_list(mols, smiles, **mol2pyg_kwargs):
+  pyg_mols = []
+  for m, s in zip(mols, smiles):
+    pyg_m = mol2pyg(m, s, **mol2pyg_kwargs)
+    if pyg_m == None: raise ValueError('Error in casting mol to pyg') # continue
+    pyg_mols.append(pyg_m)
+  return pyg_mols
 
 
 def mols2pyg_list_with_targets(mols, smiles, ys, **mol2pyg_kwargs):
@@ -68,7 +80,7 @@ def mol2pyg(mol, smi, max_energy:float=0.0):
       group=torch.tensor(group),
       period=torch.tensor(period),
       pos=torch.tensor(pos, dtype=torch.float32),
-      smiles=smi, #Chem.MolToSmiles(mol, smi_writer_params()),
+      smiles=smi, #todo handle case where not smi Chem.MolToSmiles(mol, smi_writer_params())
       hybridization=torch.tensor(_hybridization, dtype=torch.long),
       is_aromatic=torch.tensor(aromatic, dtype=torch.long),
       is_in_ring=torch.tensor(is_in_ring, dtype=torch.long),
