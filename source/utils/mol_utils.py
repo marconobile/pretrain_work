@@ -126,24 +126,36 @@ def preprocess_mol(m:rdChem.Mol,
   return m
 
 
-def visualize_3d_mols(mols, drawing_style:str='stick'):
-  import py3Dmol
-  drawing_style_options =[
-    "line", # Wire Model
-    "cross", # Cross Model
-    "stick", # Bar Model
-    "sphere", # Space Filling Model
-    "cartoon", # Display secondary structure in manga
-  ]
-  assert drawing_style in drawing_style_options
-  if not isinstance(mols, list): mols = [mols]
-  p = py3Dmol.view(width=1500, height=400, viewergrid=(1,len(mols))) # todo expose these
-  for j in range(len(mols)):
-      p.removeAllModels(viewer=(0,j))
-      p.addModel(rdChem.MolToMolBlock(mols[j], confId=0), 'sdf', viewer=(0,j))
-      p.setStyle({'stick':{}}, viewer=(0,j))
-  p.zoomTo()
-  p.show()
+def visualize_3d_mols(mols,
+    drawing_style: str = 'stick',
+    titles: list[str] = None,
+    width:int=1500,
+    height:int=400,
+    grid:tuple=None,
+  ):
+    import py3Dmol
+    from rdkit import Chem as rdChem
+    if not grid: grid = (1, len(mols))
+    drawing_style_options = [
+        "line",   # Wire Model
+        "cross",  # Cross Model
+        "stick",  # Bar Model
+        "sphere", # Space Filling Model
+        "cartoon",# Display secondary structure in manga
+    ]
+    assert drawing_style in drawing_style_options, f"Invalid drawing style. Choose from {drawing_style_options}"
+    if not isinstance(mols, list): mols = [mols]
+    if titles is None: titles = ["" for _ in mols]  # Default empty titles if none provided
+    assert len(titles) == len(mols), "Length of titles must match the number of molecules."
+
+    p = py3Dmol.view(width=width, height=height, viewergrid=grid)
+    for j in range(len(mols)):
+        p.removeAllModels(viewer=(0, j))
+        p.addModel(rdChem.MolToMolBlock(mols[j], confId=0), 'sdf', viewer=(0, j))
+        p.setStyle({drawing_style: {}}, viewer=(0, j))
+        if titles[j]: p.addLabel(titles[j], viewer=(0, j)) # , {'position': {'x': 0, 'y': 1.5, 'z': 0}, 'backgroundColor': 'white', 'fontSize': 16}
+    p.zoomTo()
+    p.show()
 
 
 def get_dihedral_indices(mol):
