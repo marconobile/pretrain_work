@@ -22,6 +22,7 @@ class FocalLossBinaryAccuracy:
         self,
         func_name: str,
         params: dict = {},
+        **kwargs,
     ):
         '''
         alpha is a number between 0 and 1
@@ -45,6 +46,7 @@ class FocalLossBinaryAccuracy:
         ref: dict,
         key: str, # key to be used to select element in DataDict
         mean: bool = True,
+        **kwargs,
     ):
         inputs = pred[key].squeeze()
         targets = ref[key].squeeze()
@@ -67,6 +69,7 @@ class BinaryAccuracy:
         self,
         func_name: str,
         params: dict = {},
+        **kwargs,
     ):
         self.func_name = "BinaryAccuracy"
         self.treshold_for_positivity = .5
@@ -77,6 +80,7 @@ class BinaryAccuracy:
         ref: dict,
         key: str, # key to be used to select element in DataDict
         mean: bool = True,
+        **kwargs,
     ):
         if mean:
             raise(f"{__class__.__name__} cannot be used as loss function for training")

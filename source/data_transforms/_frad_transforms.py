@@ -107,7 +107,7 @@ def apply_all_dihedrals(coords, rotable_bonds, original_dihedral_angles_degrees,
   return coords
 
 
-def apply_dihedral_noise(data, scale):
+def apply_dihedral_noise(data, scale:float):
   '''sample and apply dihedral noise'''
   rotable_bonds = data.rotable_bonds.tolist()
   if not rotable_bonds: return data
@@ -127,9 +127,9 @@ def apply_dihedral_noise(data, scale):
   return coords
 
 
-def apply_coords_noise(coords): #, coords_noise_tau):
+def apply_coords_noise(coords, add_coords_noise:bool):
   '''sample and return coords noise'''
-  coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) *0 #* coord_noise() #* coords_noise_tau
+  coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * (coord_noise() if add_coords_noise else 0)
   update_coords = coords + coords_noise_to_be_predicted
   return update_coords, coords_noise_to_be_predicted
 
@@ -151,22 +151,25 @@ def coord_noise(linspace_start:float=0.1, linspace_end:float=0.001, int_start:in
     return result
 
 
-def frad(data, dihedral_scale:float=0.0, k:int=10): #! hyperparams here
+def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=10, add_coords_noise:bool=True): #! hyperparams here
   '''
   modifies data inplace
   dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
   k: if (energy of noised conformer) > (k*|energy_min - energy_max|): resample
   '''
-  while True:
-    # sample from starting-conformer
+  n_attempts = 0
+  while n_attempts <= max_n_attempts:
+    # sample modifications to conf from starting-conf
     coords = apply_dihedral_noise(data, dihedral_scale)
     mol = Chem.MolFromSmiles(data.smiles, smi_reader_params()) # to be kept inside the while to avoid "energy" locks
     mol = Chem.AddHs(mol, addCoords=True)
     mol = set_coords(mol, coords)
-    print(get_energy(mol), k*data.max_energy)
+    print("Current conf Energy: ", get_energy(mol), " original energy: ", data.max_energy, " Threshold energy: ", k*data.max_energy)
     if get_energy(mol) <= k*data.max_energy: break
+    n_attempts +=1
+    k+=.5
 
-  update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords)
+  update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)
   data.pos = update_coords
   data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float)
   return data
