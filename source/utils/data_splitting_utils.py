@@ -6,9 +6,11 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from random import shuffle
+from typing import Union, List
 
 
-def scaffold_splitter(smile_list, frac_train: float = 0.8, frac_valid: float = 0.1, frac_test: float = 0.1, seed: int=42):
+
+def scaffold_splitter(smile_list, frac_train: float = 0.8, frac_valid: float = 0.1, frac_test: float = 0.1, seed: int=42) -> Union[List[str], List[str], List[str]]:
   '''https://deepchem.readthedocs.io/en/latest/api_reference/splitters.html#scaffoldsplitter'''
   fake_x = np.zeros(len(smile_list))
   fake_y = np.ones(len(smile_list))

@@ -43,12 +43,14 @@ def generateConformationEnsembles(mol: Chem.BasicMolecule, conf_gen: ConfGen.Con
   return (status, num_confs)
 
 #! 1.5/2 -> 2/5 wrt rotatable bond: idea min_rmsd = f(num_rot_bonds); same for energy_window?
-def get_conformer_generator(max_confs:int, max_time:int=36000, min_rmsd:float=0.5, e_window:float=25.0):
+def get_conformer_generator(max_confs:int, max_time:int=3600, min_rmsd:float=1.0, e_window:float=50.0):
     '''
     Settings
     max_confs: Max. output ensemble size
     max_time:  Max. allowed molecule processing time in seconds (default: 3600 sec)
-    min_rmsd:  Output conformer RMSD threshold (default: 0.5)
+    min_rmsd:  Output conformer RMSD threshold (default: 0.5):
+      if (conformer_rmsd_wrt_og < min_rmsd) then drop conformer; if not distant enough the drop
+      increasing min_rmsd thus variance is increased
     e_window:  Output conformer energy window (default: 20.0)
 
     Create and initialize an instance of the class ConfGen.ConformerGenerator which
@@ -75,26 +77,26 @@ def generate_conformers(smi:str, conf_gen:ConfGen.ConformerGenerator, N:int):
   '''
   mol = CDPLChem.parseSMILES(smi)
   tmp_name = f"./tmp_{str(os.getpid())}.sdf"
-  try:
-    # generate conformer ensemble for read molecule
-    status, num_confs = generateConformationEnsembles(mol, conf_gen)
-    # output generated ensemble (if available)
-    if num_confs > 0:
-      writer = Chem.MolecularGraphWriter(tmp_name)
-      if not writer.write(mol): sys.exit('Error: output of conformer ensemble for molecule %s failed' % smi)
-      writer.close()
-    else:
-      warnings.warn(f"no conformers generated for {smi} via CONFORGE, fallback to rdkit 3d-embedding+energy minimization")
-      mol = rdChem.MolFromSmiles(smi, smi_reader_params())
-      mol, filtered_conformers = rdkit_generate_conformers(mol,
-                                      num_conformers=conf_gen.settings.maxNumOutputConformers,
-                                      prune_rms_thresh=conf_gen.settings.minRMSD,
-                                      energy_threshold=50.0
-                                    )
-      if not mol: return []
-      rdkit_save_conformers_to_sdf(mol, tmp_name, filtered_conformers)
-  except Exception as e:
-    sys.exit('Error: conformer ensemble generation or output for molecule %s failed: %s' % (smi, str(e)))
+
+  # generate conformer ensemble for read molecule
+  status, num_confs = generateConformationEnsembles(mol, conf_gen)
+  # output generated ensemble (if available)
+  if num_confs > 0:
+    # CONFORGE
+    writer = Chem.MolecularGraphWriter(tmp_name)
+    if not writer.write(mol): sys.exit('Error: output of conformer ensemble for molecule %s failed' % smi)
+    writer.close()
+  else:
+    # RDKit backup plan
+    warnings.warn(f"no conformers generated for {smi} via CONFORGE, fallback to rdkit 3d-embedding+energy minimization")
+    mol = rdChem.MolFromSmiles(smi, smi_reader_params())
+    mol, filtered_conformers = rdkit_generate_conformers(mol,
+                                    num_conformers=conf_gen.settings.maxNumOutputConformers,
+                                    prune_rms_thresh=conf_gen.settings.minRMSD,
+                                    energy_threshold=50.0
+                                  )
+    if not mol: return []
+    rdkit_save_conformers_to_sdf(mol, tmp_name, filtered_conformers)
 
   tmp_mol_ensemble = rdChem.rdmolfiles.SDMolSupplier(tmp_name, removeHs=False)
   tmp_mol_ensemble = list(tmp_mol_ensemble)

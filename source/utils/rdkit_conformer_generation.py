@@ -66,3 +66,11 @@ def rdkit_save_conformers_to_sdf(mol, filename, filtered_conformers:list=[]):
         writer.write(mol, confId=id)
     else: writer.write(mol)
     writer.close()
+
+
+# conformer_energies, converged = optimize_conformers(mol)
+#   if not conformer_energies: return None, None
+
+#   # Filter out high-energy conformers
+#   min_energy = min(conformer_energies)
+#   filtered_conformers = [i for i, energy in enumerate(conformer_energies) if energy - min_energy < energy_threshold]

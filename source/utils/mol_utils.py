@@ -8,6 +8,17 @@ from copy import deepcopy
 import warnings
 
 
+
+def optimize_conformers(molecule):
+    # Optimize all conformers using MMFFOptimizeMoleculeConfs
+    results = AllChem.MMFFOptimizeMoleculeConfs(molecule, numThreads=0, maxIters=200, mmffVariant='MMFF94', nonBondedThresh=100.0, ignoreInterfragInteractions=True)
+
+    # Extract energies and convergence information
+    energies = [result[1] for result in results]
+    converged = [result[0] == 0 for result in results]
+
+    return energies, converged
+
 def get_rdkit_conformer(mol, max_attempts:int=10):
     '''
     if returns none: mols not embeddable
