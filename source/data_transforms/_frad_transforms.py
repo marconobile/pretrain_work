@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from rdkit import Chem
-from source.utils.mol_utils import smi_reader_params, get_energy, set_coords
+from source.utils.mol_utils import smi_reader_params, get_energy, set_coords, minimum_atom_distance
 import random
 
 def do_not_nosify_mol(data):
@@ -150,24 +150,28 @@ def coord_noise(linspace_start:float=0.1, linspace_end:float=0.001, int_start:in
 
     return result
 
-
-def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=10, add_coords_noise:bool=True): #! hyperparams here
+# https://openkim.org/files/MO_959249795837_003/LennardJones612_UniversalShifted.params : 2**(1/6) * 0.5523570 = 0.62
+# .8
+def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=10, min_interatomic_dist_required:float=0.62, add_coords_noise:bool=True): #! hyperparams here
   '''
   modifies data inplace
   dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
   k: if (energy of noised conformer) > (k*|energy_min - energy_max|): resample
+
+  minimum_atom_distance 100 calls execution time: 22.7377 seconds
+  get_energy 100 calls execution time: 204.9748 seconds
   '''
-  n_attempts = 0
-  while n_attempts <= max_n_attempts:
+  # n_attempts = 0
+  while True: # n_attempts <= max_n_attempts:
     # sample modifications to conf from starting-conf
     coords = apply_dihedral_noise(data, dihedral_scale)
     mol = Chem.MolFromSmiles(data.smiles, smi_reader_params()) # to be kept inside the while to avoid "energy" locks
     mol = Chem.AddHs(mol, addCoords=True)
     mol = set_coords(mol, coords)
-    print("Current conf Energy: ", get_energy(mol), " original energy: ", data.max_energy, " Threshold energy: ", k*data.max_energy)
-    if get_energy(mol) <= k*data.max_energy: break
-    n_attempts +=1
-    k+=.5
+    # print(f"Attempt: {n_attempts}, sampled conf energy: {get_energy(mol)}, original conf energy: {data.max_energy}, threshold energy: {k*data.max_energy}, min dist between atoms:  {minimum_atom_distance(mol)}")
+    if (minimum_atom_distance(mol) > min_interatomic_dist_required) and (get_energy(mol) <= k*data.max_energy): break
+    # n_attempts +=1
+    k+=.1
 
   update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)
   data.pos = update_coords
