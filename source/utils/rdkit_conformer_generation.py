@@ -28,7 +28,7 @@ def rdkit_generate_conformers(mol, num_conformers=10, prune_rms_thresh=0.5, ener
     conf = get_rdkit_conformer(mol)
     if not conf:
       warnings.warn(f"rdkit fallback failed aswell, dropping molecule")
-      return []
+      return None, None
 
     # Generate initial conformers
     params = AllChem.ETKDGv3()
@@ -37,14 +37,15 @@ def rdkit_generate_conformers(mol, num_conformers=10, prune_rms_thresh=0.5, ener
 
     # Optimize conformers and calculate energies
     conformer_energies = []
-    for conf_id in range(mol.GetNumConformers()):
+    for conf_id in range(mol.GetNumConformers()): # TODO replace with MMFFOptimizeMoleculeConfs
         # Optimize the conformation
-        AllChem.UFFOptimizeMolecule(mol, confId=conf_id)
+        AllChem.MMFFOptimizeMolecule(mol, confId=conf_id)
 
         # Calculate the energy
-        energy = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id).CalcEnergy()
+        energy = AllChem.MMFFGetMoleculeForceField(mol, confId=conf_id).CalcEnergy()
         conformer_energies.append((conf_id, energy))
 
+    if not conformer_energies: return None, None
     # Filter out high-energy conformers
     min_energy = min(energy for _, energy in conformer_energies)
     filtered_conformers = [conf_id for conf_id, energy in conformer_energies if energy - min_energy < energy_threshold]

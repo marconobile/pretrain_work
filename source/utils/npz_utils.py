@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 from .file_handling_utils import ls
@@ -12,7 +13,8 @@ def get_field_from_npzs(path:str, field:Union[str, List]='*'):
   l = get_field_from_npzs(p)
   l[0][k] -> access to content
   '''
-  npz_files = ls(path)
+  is_single_npz = lambda path: os.path.splitext(path)[1].lower() == ".npz"
+  npz_files = [path] if is_single_npz(path) else ls(path)
   if field == '*': return [np.load(npz) for npz in npz_files]
   possible_keys = [k for k in np.load(npz_files[0]).keys()]
   if field not in possible_keys: raise ValueError(f'{field} not in {possible_keys}')
@@ -29,7 +31,7 @@ def get_field_from_npzs(path:str, field:Union[str, List]='*'):
   return out
 
 
-def save_npz(pyg_mols, f:callable=None, folder_name:str=None, N:int=None, check=True, idx:int=0):
+def save_npz(pyg_mols, f:callable=lambda y:y, folder_name:str=None, N:int=None, check=True, idx:int=0):
     '''
     pyg_mols: list of pytorch geometric data objects
     f: func to apply to each g['y'], more below
@@ -79,6 +81,7 @@ def save_npz(pyg_mols, f:callable=None, folder_name:str=None, N:int=None, check=
 def save_pyg_as_npz(g, file, f:callable=None, check:bool=True):
   coords = g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
   # in general: if fixed field it must be (N,), else (1, N)
+  atom_types = g['atom_types'].numpy()
   group = g['group'].numpy()
   period = g['period'].numpy()
   # edge_index = g['edge_index'].unsqueeze(0).numpy() # (1, 2, E)
@@ -101,7 +104,7 @@ def save_pyg_as_npz(g, file, f:callable=None, check:bool=True):
 
     # atom_types
     # eg shape: (66,)
-    # assert len(atom_types.shape) == 1
+    assert len(atom_types.shape) == 1
     assert len(group.shape) == 1
     assert len(period.shape) == 1
 
@@ -127,6 +130,7 @@ def save_pyg_as_npz(g, file, f:callable=None, check:bool=True):
   # TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
   data = {
       "coords": coords,
+      "atom_types":atom_types,
       "group": group,
       "period": period,
       "graph_labels": graph_labels,
@@ -144,22 +148,4 @@ def save_pyg_as_npz(g, file, f:callable=None, check:bool=True):
 
   # Save the data using np.savez
   np.savez(file=file, **filtered_data)
-
-  # np.savez(
-  #   file,
-  #   coords=coords,
-  #   group=group,
-  #   period=period,
-  #   # edge_index=edge_index, # if provided it must have a batch dimension
-  #   # edge_attr=edge_attr,
-  #   graph_labels=graph_labels,
-  #   hybridization=hybridization,
-  #   chirality=chirality,
-  #   is_aromatic=is_aromatic,
-  #   is_in_ring=is_in_ring,
-  #   smiles=smiles,
-  #   rotable_bonds=rotable_bonds,
-  #   dihedral_angles_degrees=dihedral_angles_degrees,
-  # )
-
 

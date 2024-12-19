@@ -43,7 +43,7 @@ def mol2pyg(mol, smi, max_energy:float=0.0):
     returns: pyg data obj or None if some operations are not possible
     '''
     conf = mol.GetConformer() # ToDo: ok iff sensible conformer has been already generated and setted
-    aromatic, is_in_ring, _hybridization, chirality = [], [], [], []
+    type_idx, aromatic, is_in_ring, _hybridization, chirality = [], [], [], [], []
     pos,group, period = [], [], []
     num_atoms = mol.GetNumAtoms()
     adj_matrix = np.zeros((num_atoms, num_atoms), dtype=int)
@@ -55,6 +55,7 @@ def mol2pyg(mol, smi, max_energy:float=0.0):
         adj_matrix[i, neighbor_idx] = 1
         adj_matrix[neighbor_idx, i] = 1
 
+      type_idx.append(atom.GetAtomicNum())
       group.append(periodic_table_group(atom))
       period.append(periodic_table_period(atom))
 
@@ -77,6 +78,7 @@ def mol2pyg(mol, smi, max_energy:float=0.0):
     # TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
     return Data(
       adj_matrix=torch.tensor(adj_matrix),
+      atom_types=torch.tensor(type_idx),
       group=torch.tensor(group),
       period=torch.tensor(period),
       pos=torch.tensor(pos, dtype=torch.float32),

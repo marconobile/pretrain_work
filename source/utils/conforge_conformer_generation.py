@@ -42,7 +42,7 @@ def generateConformationEnsembles(mol: Chem.BasicMolecule, conf_gen: ConfGen.Con
   # return status code and the number of generated conformers
   return (status, num_confs)
 
-
+#! 1.5/2 -> 2/5 wrt rotatable bond: idea min_rmsd = f(num_rot_bonds); same for energy_window?
 def get_conformer_generator(max_confs:int, max_time:int=36000, min_rmsd:float=0.5, e_window:float=25.0):
     '''
     Settings
@@ -91,6 +91,7 @@ def generate_conformers(smi:str, conf_gen:ConfGen.ConformerGenerator, N:int):
                                       prune_rms_thresh=conf_gen.settings.minRMSD,
                                       energy_threshold=50.0
                                     )
+      if not mol: return []
       rdkit_save_conformers_to_sdf(mol, tmp_name, filtered_conformers)
   except Exception as e:
     sys.exit('Error: conformer ensemble generation or output for molecule %s failed: %s' % (smi, str(e)))
