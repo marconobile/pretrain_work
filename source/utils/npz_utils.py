@@ -78,8 +78,8 @@ def save_npz(pyg_mols, f:callable=lambda y:y, folder_name:str=None, N:int=None, 
     return idx
 
 
-def save_pyg_as_npz(g, file, f:callable=None, check:bool=True):
-  coords = g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
+def save_pyg_as_npz(g, file, f:callable=lambda y:y, check:bool=True):
+  coords = g['pos'].numpy() if g['pos'].dim() == 3 else  g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
   # in general: if fixed field it must be (N,), else (1, N)
   atom_types = g['atom_types'].numpy()
   group = g['group'].numpy()
@@ -97,9 +97,9 @@ def save_pyg_as_npz(g, file, f:callable=None, check:bool=True):
   if check:  # this works iif all are fixed fields
     # coords
     # eg shape: (1, 66, 3)
-    assert len(coords.shape) == 3
+    assert len(coords.shape) == 3, f"coords shape is {coords.shape}"
     B, N, D = coords.shape
-    assert B == 1
+    assert B == coords.shape[0]
     assert D == 3
 
     # atom_types

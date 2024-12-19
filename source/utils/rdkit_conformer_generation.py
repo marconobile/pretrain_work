@@ -3,10 +3,12 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdMolAlign
 from rdkit.Chem import rdMolDescriptors
 from rdkit.Chem import SDWriter
-from source.utils.mol_utils import get_rdkit_conformer
+from source.utils.mol_utils import get_rdkit_conformer, preprocess_mol
 import warnings
 
-def rdkit_generate_conformers(mol, num_conformers=10, prune_rms_thresh=0.5, energy_threshold=50.0):
+from globals import *
+
+def rdkit_generate_conformers(mol):
     """
     Generate and optimize conformers for a molecule.
 
@@ -20,20 +22,18 @@ def rdkit_generate_conformers(mol, num_conformers=10, prune_rms_thresh=0.5, ener
     Returns:
     - List of conformers (RDKit molecule objects)
     """
+    mol = preprocess_mol(mol)
 
-    # Add hydrogens
-    mol = rdChem.AddHs(mol, addCoords=True)
-    # Get conformer
-    mol.RemoveAllConformers() # remove all present conformers
-    conf = get_rdkit_conformer(mol)
-    if not conf:
-      warnings.warn(f"rdkit fallback failed aswell, dropping molecule")
-      return None, None
+    # # Get conformer
+    # conf = get_rdkit_conformer(mol) # do I need this?
+    # if not conf:
+    #   warnings.warn(f"rdkit fallback failed aswell, dropping molecule")
+    #   return None, None
 
     # Generate initial conformers
     params = AllChem.ETKDGv3()
-    params.pruneRmsThresh = prune_rms_thresh
-    AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, params=params)
+    params.pruneRmsThresh = min_rmsd
+    AllChem.EmbedMultipleConfs(mol, clearConfs=True, numConfs=max_confs, params=params)
 
     # Optimize conformers and calculate energies
     conformer_energies = []
@@ -46,9 +46,10 @@ def rdkit_generate_conformers(mol, num_conformers=10, prune_rms_thresh=0.5, ener
         conformer_energies.append((conf_id, energy))
 
     if not conformer_energies: return None, None
+
     # Filter out high-energy conformers
     min_energy = min(energy for _, energy in conformer_energies)
-    filtered_conformers = [conf_id for conf_id, energy in conformer_energies if energy - min_energy < energy_threshold]
+    filtered_conformers = [conf_id for conf_id, energy in conformer_energies if energy - min_energy < e_window]
     return mol, filtered_conformers
 
 def rdkit_save_conformers_to_sdf(mol, filename, filtered_conformers:list=[]):

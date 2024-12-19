@@ -88,7 +88,9 @@ def get_energy(mol):
   kilocalories per mole (kcal/mol)  energies are reported in kcal mol-1.
   If not_converged is 0 the optimization converged for that conformer.
   '''
-  not_converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, maxIters=0)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
+  numThreads = 1
+  assert numThreads == 1 # mandatory otherwise not usable in pytorch transform
+  not_converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, maxIters=0, numThreads=numThreads)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
   return energy
 
 

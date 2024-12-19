@@ -2,63 +2,83 @@ from tqdm import tqdm
 from rdkit import Chem as rdChem
 from collections import OrderedDict
 from copy import deepcopy
-
-from source.utils.conforge_conformer_generation import generate_conformers, get_conformer_generator, rdkit_generate_conformers
+import torch
+from source.utils.code_utils import TimeThis
+from source.utils.conforge_conformer_generation import generate_conformers, generate_conformers_rdkit, get_conformer_generator, rdkit_generate_conformers
 from source.utils.mol2pyg import mols2pyg_list_with_targets, pyg2mol
 from source.utils.mol_utils import get_energy, smi_reader_params, smi_writer_params, drop_disconnected_components,visualize_3d_mols, set_coords, preprocess_mol,has_steric_clashes,fix_conformer,minimum_atom_distance, get_rdkit_conformer
 from source.utils.data_splitting_utils import create_data_folders, parse_smiles_file, get_smiles_and_targets_from_csv
 from source.data_transforms._frad_transforms import frad
-
 from source.utils.file_handling_utils import ls
-from source.utils.npz_utils import get_field_from_npzs, save_npz
+from source.utils.npz_utils import get_field_from_npzs, save_npz, save_pyg_as_npz
 from source.utils.data_splitting_utils import scaffold_splitter
 
-import time
-import datetime
+import multiprocessing as mp
+from functools import partial
+from multiprocessing import Queue
 
+from globals import *
 
-start_time = time.perf_counter()
+# global in this file
+q = Queue() # queue to store failed molecules
 
-# get data
-input_data = '/home/nobilm@usi.ch/pretrain_paper/data/halicin_data.csv'
-smiles,targets = get_smiles_and_targets_from_csv(input_data)
-
-# create dir
-dir = '/storage_common/nobilm/pretrain_paper/second_test'
-all_dir, train_dir, val_dir, test_dir = create_data_folders(dir)
-
-# set up conf gen
-max_confs = 3 #100
-n_confs_to_keep = 2 # num of confs to keep after generating max_confs
-conf_generator = get_conformer_generator(max_confs=max_confs)
-
-# todos:
-# 1) add splitting via scaffold_splitter <- this takes smiles
-# 2) parallelization
-# 3) mol filtering?
-# 4) logs
-# 5) cast to script with mytinyargprs
-
-# train_smiles,val_smiles,test_smiles = scaffold_splitter(smiles, 0.9, 0.1, 0.0)
-
-
-
-i_save = 0
-for s,y in tqdm(zip(smiles, targets), total=len(smiles)):
+def worker(smiles_target, save_dir, lock, shared_i_save):
+  s, y = smiles_target
   s = drop_disconnected_components(s)
-  conformers = generate_conformers(s, conf_generator, n_confs_to_keep)
-  if not conformers: continue
+  conformers = generate_conformers(s, get_conformer_generator())
+  if not conformers:
+    q.put(smiles_target)
+    return
+
   mol2pyg_kwargs = {"max_energy": max((get_energy(m) for m in conformers))}
-  pyg_mol_confs = mols2pyg_list_with_targets(conformers, [s]*len(conformers), [y]*len(conformers), **mol2pyg_kwargs)
-  i_save = save_npz(pyg_mol_confs, folder_name=all_dir, idx=i_save)
+  pyg_mol_fixed_fields = mols2pyg_list_with_targets([conformers[0]], [s], [y], **mol2pyg_kwargs)[0]
+
+  batched_pos = []
+  for mol in conformers:
+    pos = []
+    conf = mol.GetConformer()
+    for i, atom in enumerate(mol.GetAtoms()):
+      positions = conf.GetAtomPosition(i)
+      pos.append((positions.x, positions.y, positions.z))
+    pos = torch.tensor(pos, dtype=torch.float32)
+    batched_pos.append(pos)
+
+  batched_pos = torch.stack(batched_pos)
+  pyg_mol_fixed_fields.pos = batched_pos
+
+  with lock:
+    i_save = shared_i_save.value
+    save_pyg_as_npz(pyg_mol_fixed_fields, f'{save_dir}/mol_{i_save}')
+    shared_i_save.value += 1
+    print(f"Saved file: {save_dir}/mol_{i_save}")
 
 
-print("final i_save", i_save)
-end_time = time.perf_counter()
-elapsed_time = end_time - start_time
-# Convert elapsed time to hh:mm:ss format
-td = datetime.timedelta(seconds=elapsed_time)
-str_time = str(td)
-print(f"Execution time: {str_time}")
+if __name__ == '__main__':
+  # get data
+  input_data = '/home/nobilm@usi.ch/pretrain_paper/data/halicin_data.csv'
+  smiles, targets = get_smiles_and_targets_from_csv(input_data)
 
+  # create dir
+  dir = '/storage_common/nobilm/pretrain_paper/second_test'
+  all_dir, train_dir, val_dir, test_dir = create_data_folders(dir)
+
+  manager = mp.Manager()
+  lock = manager.Lock()
+  shared_i_save = manager.Value('i', 0)
+  worker_ = partial(worker, save_dir=all_dir, lock=lock, shared_i_save=shared_i_save)
+
+  with TimeThis():
+    # with mp.Pool(70) as pool: # mp.cpu_count()
+    #   tasks = [(s, y) for s, y in zip(smiles, targets)]
+    #   results = list(pool.imap_unordered(worker_, tasks))
+
+    tasks = [(s, y) for s, y in zip(smiles, targets)]
+    q.put(tasks[0])
+    q.put(tasks[1])
+    q.put(tasks[2])
+    q.put(tasks[3])
+
+    # process the failed molecules with rdkit
+    print(q.qsize())
+    while q.qsize() > 0: worker_(q.get())
 
