@@ -68,15 +68,9 @@ if __name__ == '__main__':
   worker_ = partial(worker, save_dir=all_dir, lock=lock, shared_i_save=shared_i_save)
 
   with TimeThis():
-    # with mp.Pool(70) as pool: # mp.cpu_count()
-    #   tasks = [(s, y) for s, y in zip(smiles, targets)]
-    #   results = list(pool.imap_unordered(worker_, tasks))
-
-    tasks = [(s, y) for s, y in zip(smiles, targets)]
-    q.put(tasks[0])
-    q.put(tasks[1])
-    q.put(tasks[2])
-    q.put(tasks[3])
+    with mp.Pool(70) as pool: # mp.cpu_count()
+      tasks = [(s, y) for s, y in zip(smiles, targets)]
+      results = list(pool.imap_unordered(worker_, tasks))
 
     # process the failed molecules with rdkit
     print(q.qsize())
