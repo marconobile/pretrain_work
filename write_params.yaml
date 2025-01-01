@@ -1,6 +1,17 @@
 #! 1.5/2 -> 2/5 wrt rotatable bond: idea min_rmsd = f(num_rot_bonds); same for energy_window?
 
-max_confs: 3
-n_confs_to_keep: 2
-min_rmsd: 0.5
-e_window: 100.0
+max_confs: 100
+n_confs_to_keep: 4
+min_rmsd: 2.5
+e_window: 150.0
+num_threads: 100
+
+
+# max_confs: 100
+# n_confs_to_keep: 4
+# min_rmsd: 2.5
+# e_window: 150.0
+# num_threads: 100
+# # max_time:int=3600000
+# Mols discarded 4976 out of 1591378
+# Execution time: 17:54:00.537049

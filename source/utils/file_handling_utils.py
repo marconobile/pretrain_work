@@ -1,6 +1,7 @@
 import os
 from os.path import isfile, join
 import shutil
+import errno
 
 
 def ls(dir):
@@ -22,3 +23,11 @@ def rm_and_recreate_dir(dir):
   if os.path.exists(dir): shutil.rmtree(dir)
   os.makedirs(dir)
 
+
+
+def silentremove(filename):
+  try:
+      os.remove(filename)
+  except OSError as e: # this would be "except OSError, e:" before Python 2.6
+      if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
+          raise # re-raise exception if a different error occurred

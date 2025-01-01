@@ -3,6 +3,7 @@ import numpy as np
 from rdkit import Chem
 from source.utils.mol_utils import smi_reader_params, get_energy, set_coords, minimum_atom_distance
 import random
+from scipy.spatial.distance import pdist
 
 def do_not_nosify_mol(data):
   data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
@@ -150,9 +151,40 @@ def coord_noise(linspace_start:float=0.1, linspace_end:float=0.001, int_start:in
 
     return result
 
+# # https://openkim.org/files/MO_959249795837_003/LennardJones612_UniversalShifted.params : 2**(1/6) * 0.5523570 = 0.62
+# # .8
+# def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=5, min_interatomic_dist_required:float=0.62, add_coords_noise:bool=True): #! hyperparams here
+#   '''
+#   modifies data inplace
+#   dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
+#   k: if (energy of noised conformer) > (k*|energy_min - energy_max|): resample
+
+#   minimum_atom_distance 100 calls execution time: 22.7377 seconds
+#   get_energy 100 calls execution time: 204.9748 seconds
+#   '''
+#   n_attempts = 0
+#   while n_attempts <= max_n_attempts:
+#     # sample modifications to conf from starting-conf
+#     coords = apply_dihedral_noise(data, dihedral_scale)
+#     # mol = Chem.MolFromSmiles(str(data.smiles), smi_reader_params()) # to be kept inside the while to avoid "energy" locks
+#     # mol = Chem.AddHs(mol, addCoords=True)
+#     # mol = set_coords(mol, coords)
+#     # print(f"Attempt: {n_attempts}, sampled conf energy: {get_energy(mol)}, original conf energy: {data.max_energy}, threshold energy: {k*data.max_energy}, min dist between atoms:  {minimum_atom_distance(mol)}")
+#     # if (minimum_atom_distance(mol) > min_interatomic_dist_required) and (get_energy(mol) <= torch.abs(k*data.max_energy)): break
+#     if np.min(pdist(coords, 'euclidean')) > min_interatomic_dist_required: break
+#     n_attempts +=1
+#     # k+=1.5
+
+#   update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)
+#   data.pos = update_coords.to(torch.float32)
+#   data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float32)
+#   return data
+
+
 # https://openkim.org/files/MO_959249795837_003/LennardJones612_UniversalShifted.params : 2**(1/6) * 0.5523570 = 0.62
 # .8
-def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=10, min_interatomic_dist_required:float=0.62, add_coords_noise:bool=True): #! hyperparams here
+import copy
+def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=5, min_interatomic_dist_required:float=0.62, add_coords_noise:bool=True): #! hyperparams here
   '''
   modifies data inplace
   dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
@@ -162,18 +194,15 @@ def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=10, min_in
   get_energy 100 calls execution time: 204.9748 seconds
   '''
   # n_attempts = 0
-  while True: # n_attempts <= max_n_attempts:
-    # sample modifications to conf from starting-conf
+  # while n_attempts <= max_n_attempts:
+  try:
     coords = apply_dihedral_noise(data, dihedral_scale)
-    mol = Chem.MolFromSmiles(data.smiles, smi_reader_params()) # to be kept inside the while to avoid "energy" locks
-    mol = Chem.AddHs(mol, addCoords=True)
-    mol = set_coords(mol, coords)
-    # print(f"Attempt: {n_attempts}, sampled conf energy: {get_energy(mol)}, original conf energy: {data.max_energy}, threshold energy: {k*data.max_energy}, min dist between atoms:  {minimum_atom_distance(mol)}")
-    if (minimum_atom_distance(mol) > min_interatomic_dist_required) and (get_energy(mol) <= k*data.max_energy): break
+    if np.min(pdist(coords, 'euclidean')) < min_interatomic_dist_required: do_not_nosify_mol(data)
+  except:
+    return do_not_nosify_mol(data)
     # n_attempts +=1
-    k+=.1
 
   update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)
-  data.pos = update_coords
-  data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float)
+  data.pos = update_coords.to(torch.float32)
+  data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float32)
   return data

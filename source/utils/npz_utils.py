@@ -78,22 +78,28 @@ def save_npz(pyg_mols, f:callable=lambda y:y, folder_name:str=None, N:int=None, 
     return idx
 
 
-def save_pyg_as_npz(g, file, f:callable=lambda y:y, check:bool=True):
-  coords = g['pos'].numpy() if g['pos'].dim() == 3 else  g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
+def save_pyg_as_npz(g, file, f:callable=lambda y:y, check:bool=False):
+  data = {}
+  data['coords'] = g['pos'].numpy() if g['pos'].dim() == 3 else  g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
   # in general: if fixed field it must be (N,), else (1, N)
-  atom_types = g['atom_types'].numpy()
-  group = g['group'].numpy()
-  period = g['period'].numpy()
+  data['atom_types'] = g['atom_types'].numpy()
+  data['group'] = g['group'].numpy()
+  data['period'] = g['period'].numpy()
   # edge_index = g['edge_index'].unsqueeze(0).numpy() # (1, 2, E)
   # edge_attr = g['edge_attr'].unsqueeze(0).numpy() # (1, E, Edg_attr_dims)
-  hybridization = g['hybridization'].numpy()  # (N, )
-  chirality = g['chirality'].numpy()  # (N, )
-  is_aromatic = g['is_aromatic'].numpy()  # (N, )
-  is_in_ring = g['is_in_ring'].numpy()  # (N, )
-  smiles = g['smiles']
+  data['hybridization'] = g['hybridization'].numpy()  # (N, )
+  data['chirality'] = g['chirality'].numpy()  # (N, )
+  data['is_aromatic'] = g['is_aromatic'].numpy()  # (N, )
+  data['is_in_ring'] = g['is_in_ring'].numpy()  # (N, )
+  data['smiles'] = g['smiles']
+  data['adj_matrix'] = g['adj_matrix'].numpy()
+  data['max_energy'] = g['max_energy']
+  data['rotable_bonds'] = g['rotable_bonds'].numpy()
+  data['dihedral_angles_degrees'] = g['dihedral_angles_degrees'].numpy()
 
-  graph_labels = f(g['y']) if f else None # (1, N) # nb this is already unsqueezed
-  if isinstance(graph_labels, torch.Tensor): graph_labels = graph_labels.numpy()
+  data['graph_labels'] = f(g['y'])
+  if isinstance(data['graph_labels'], torch.Tensor): data['graph_labels'] = data['graph_labels'].numpy()
+
   if check:  # this works iif all are fixed fields
     # coords
     # eg shape: (1, 66, 3)
@@ -119,29 +125,12 @@ def save_pyg_as_npz(g, file, f:callable=lambda y:y, check:bool=True):
     assert is_aromatic.shape[0] == N
     assert is_in_ring.shape[0] == N
 
-    rotable_bonds = g['rotable_bonds'].numpy()
-    dihedral_angles_degrees = g['dihedral_angles_degrees'].numpy()
+
 
     # graph_labels
     # eg shape: (1, 1)
     # assert len(graph_labels.shape) == 2
     # assert graph_labels.shape[0] == 1
-
-  # TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
-  data = {
-      "coords": coords,
-      "atom_types":atom_types,
-      "group": group,
-      "period": period,
-      "graph_labels": graph_labels,
-      "hybridization": hybridization,
-      "chirality": chirality,
-      "is_aromatic": is_aromatic,
-      "is_in_ring": is_in_ring,
-      "smiles": smiles,
-      "rotable_bonds": rotable_bonds,
-      "dihedral_angles_degrees": dihedral_angles_degrees,
-  }
 
   # Filter out the None values
   filtered_data = {k: v for k, v in data.items() if v is not None}

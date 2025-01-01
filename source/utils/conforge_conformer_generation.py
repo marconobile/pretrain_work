@@ -14,6 +14,7 @@ import CDPL.Chem as CDPLChem
 from source.utils.mol_utils import get_dihedral_angles, get_rdkit_conformer, minimize_energy, smi_reader_params
 from source.utils.rdkit_conformer_generation import *
 from globals import *
+from source.utils.file_handling_utils import silentremove
 
 
 def generateConformationEnsembles(mol: Chem.BasicMolecule, conf_gen: ConfGen.ConformerGenerator):
@@ -44,7 +45,7 @@ def generateConformationEnsembles(mol: Chem.BasicMolecule, conf_gen: ConfGen.Con
   return (status, num_confs)
 
 
-def get_conformer_generator(max_time:int=960000):
+def get_conformer_generator(max_time:int=36000): # TODO cast to time
     '''
     Settings
     max_confs: Max. output ensemble size
@@ -90,17 +91,20 @@ def generate_conformers(smi:str, conf_gen:ConfGen.ConformerGenerator):
   mol = CDPLChem.parseSMILES(smi)
   status, num_confs = generateConformationEnsembles(mol, conf_gen)
   if num_confs == 0:
-    warnings.warn(f"no conformers generated for {smi} via CONFORGE: {status_to_str[status]}")
+    # warnings.warn(f"no conformers generated for {smi} via CONFORGE: {status_to_str[status]}")
+    print(f"no conformers generated for {smi} via CONFORGE: {status_to_str[status]}")
     return []
 
-  with tempfile.NamedTemporaryFile(delete=True) as tmp_file:
-    tmp_name = tmp_file.name + ".sdf"
-    writer = Chem.MolecularGraphWriter(tmp_name)
+  with tempfile.NamedTemporaryFile(dir='/home/nobilm@usi.ch/pretrain_paper/tmp/', delete=True) as tmp_file:
+    unique_filename = tmp_file.name + ".sdf"
+    writer = Chem.MolecularGraphWriter(unique_filename)
     if not writer.write(mol):
       writer.close()
+      silentremove(unique_filename)
       sys.exit('Error: output of conformer ensemble for molecule %s failed' % smi)
     writer.close()
-    tmp_mol_ensemble = list(rdChem.rdmolfiles.SDMolSupplier(tmp_name, removeHs=False))
+    tmp_mol_ensemble = list(rdChem.rdmolfiles.SDMolSupplier(unique_filename, removeHs=False))
+    silentremove(unique_filename)
 
   return load_conformers_from_sdf(tmp_mol_ensemble, n_confs_to_keep)
 

@@ -16,7 +16,7 @@ from source.utils.data_splitting_utils import scaffold_splitter
 import multiprocessing as mp
 from functools import partial
 from multiprocessing import Queue
-
+import numpy as np
 from globals import *
 
 # global in this file
@@ -30,7 +30,12 @@ def worker(smiles_target, save_dir, lock, shared_i_save):
     q.put(smiles_target)
     return
 
-  mol2pyg_kwargs = {"max_energy": max((get_energy(m) for m in conformers))}
+  try:
+    mol2pyg_kwargs = {"max_energy": max((get_energy(m) for m in conformers))}
+  except rdChem.KekulizeException as e:
+    print(f"KekulizeException: {e} for {s}")
+    return
+
   pyg_mol_fixed_fields = mols2pyg_list_with_targets([conformers[0]], [s], [y], **mol2pyg_kwargs)[0]
 
   batched_pos = []
@@ -54,12 +59,13 @@ def worker(smiles_target, save_dir, lock, shared_i_save):
 
 
 if __name__ == '__main__':
-  # get data
-  input_data = '/home/nobilm@usi.ch/pretrain_paper/data/halicin_data.csv'
-  smiles, targets = get_smiles_and_targets_from_csv(input_data)
+  input_data = '/home/nobilm@usi.ch/pretrain_paper/data/guacamol_v1_all.smiles' # test_guac_smiles
+  # smiles, targets = get_smiles_and_targets_from_csv(input_data)
+  smiles = parse_smiles_file(input_data)
+  targets = [0] * len(smiles)
 
   # create dir
-  dir = '/storage_common/nobilm/pretrain_paper/second_test'
+  dir = '/storage_common/nobilm/pretrain_paper/guacamol' #'/storage_common/nobilm/pretrain_paper/second_test'
   all_dir, train_dir, val_dir, test_dir = create_data_folders(dir)
 
   manager = mp.Manager()
@@ -68,11 +74,14 @@ if __name__ == '__main__':
   worker_ = partial(worker, save_dir=all_dir, lock=lock, shared_i_save=shared_i_save)
 
   with TimeThis():
-    with mp.Pool(70) as pool: # mp.cpu_count()
+    with mp.Pool(num_threads) as pool:
       tasks = [(s, y) for s, y in zip(smiles, targets)]
       results = list(pool.imap_unordered(worker_, tasks))
+      # todo: check if cm already do the below
+      # pool.close()  # Prevents any more tasks from being submitted to the pool
+      # pool.join()   # Wait for the worker processes to terminate
 
     # process the failed molecules with rdkit
-    print(q.qsize())
-    while q.qsize() > 0: worker_(q.get())
+    print(f'Mols discarded {q.qsize()} out of {len(smiles)}')
+    # while q.qsize() > 0: worker_(q.get())
 

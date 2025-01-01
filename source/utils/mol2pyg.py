@@ -77,10 +77,10 @@ def mol2pyg(mol, smi, max_energy:float=0.0):
     rotable_bonds = get_torsions([mol])
     # TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
     return Data(
-      adj_matrix=torch.tensor(adj_matrix),
-      atom_types=torch.tensor(type_idx),
-      group=torch.tensor(group),
-      period=torch.tensor(period),
+      adj_matrix=torch.tensor(adj_matrix, dtype=torch.long),
+      atom_types=torch.tensor(type_idx, dtype=torch.long),
+      group=torch.tensor(group, dtype=torch.long),
+      period=torch.tensor(period, dtype=torch.long),
       pos=torch.tensor(pos, dtype=torch.float32),
       smiles=smi, #todo handle case where not smi Chem.MolToSmiles(mol, smi_writer_params())
       hybridization=torch.tensor(_hybridization, dtype=torch.long),
@@ -90,5 +90,5 @@ def mol2pyg(mol, smi, max_energy:float=0.0):
       rotable_bonds=torch.tensor(rotable_bonds, dtype=torch.long),
       dihedral_angles_degrees=torch.tensor(
           [GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds], dtype=torch.float32),
-      max_energy=max_energy, # max energy across all sampled conformers of input mol
+      max_energy=torch.tensor(max_energy, dtype=torch.float32), # max energy across all sampled conformers of input mol
     )
