@@ -12,13 +12,18 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from tqdm import tqdm
 
 parser_entries = [
-  {'identifiers': ["-c", "--copy"], 'type': bool, 'optional': True},
-  {'identifiers': ["-m", "--move"], 'type': bool, 'optional': True},
-  {'identifiers': ["-source", '--source'], 'type': str, 'help': 'Source path'},
-  {'identifiers': ["-dest", '--dest'], 'type': str, 'help': 'Destination path'},
-  {'identifiers': ["-n", '--n'], 'type': int, 'help': 'How many files to move/copy','optional': True, 'default': -1},
-  {'identifiers': ["-s", '--seed'], 'type': int, 'help': 'seed', 'default': 42},
-  {'identifiers': ["-p", '--processes'], 'type': int, 'help': 'num processes', 'default': 0},
+    {'identifiers': ["-c", "--copy"], 'type': bool, 'optional': True},
+    {'identifiers': ["-m", "--move"], 'type': bool, 'optional': True},
+    {'identifiers': ["-source", '--source'],
+        'type': str, 'help': 'Source path'},
+    {'identifiers': ["-dest", '--dest'],
+        'type': str, 'help': 'Destination path'},
+    {'identifiers': ["-n", '--n'], 'type': int,
+        'help': 'How many files to move/copy', 'optional': True, 'default': -1},
+    {'identifiers': ["-s", '--seed'], 'type': int,
+        'help': 'seed', 'default': 42},
+    {'identifiers': ["-p", '--processes'], 'type': int,
+        'help': 'num processes', 'default': 0},
 ]
 
 # example:
@@ -31,8 +36,8 @@ parser_entries = [
 if __name__ == "__main__":
     args = MyArgPrsr(parser_entries)
     copy, move = args.copy, args.move
-    source,dest=args.source,args.dest
-    n=args.n
+    source, dest = args.source, args.dest
+    n = args.n
     random.seed(args.seed)
 
     assert copy or move, "Either --copy or --move must be specified"
@@ -42,35 +47,36 @@ if __name__ == "__main__":
     files = os.listdir(source)
     # files = [f for f in os.listdir(source) if f.startswith("mol_") and f.endswith(".npz")]
     if n == -1:
-      n = len(files)
+        n = len(files)
     else:
-      assert n > 0, "n must be greater then 0"
-      if len(files) < n: raise ValueError(f"Not enough files in {source} to move {n} files")
-      # Shuffle and randomly select n files without replacement
-      random.shuffle(files)
-      selected_files = random.sample(files, n)
+        assert n > 0, "n must be greater then 0"
+        if len(files) < n:
+            raise ValueError(f"Not enough files in {source} to move {n} files")
+        # Shuffle and randomly select n files without replacement
+        random.shuffle(files)
+        selected_files = random.sample(files, n)
 
     # Copy/Move selected files to dest
     f = shutil.copy if copy else shutil.move
 
     user_input = input(f"Executing: {f}. Continue? (y/n): ").strip().lower()
     if user_input in ['no', 'n']:
-      print("Operation aborted.")
-      exit(0)
+        print("Operation aborted.")
+        exit(0)
     print("Starting...")
 
     def apply_f(src_dst_tuple):
-      src, dst = src_dst_tuple
-      f(src, dst)
+        src, dst = src_dst_tuple
+        f(src, dst)
 
-    ## print('num processes:', args.processes)
-    ## with TimeThis():
-    ##   with mp.Pool(args.processes) as pool: # TODO: this is probably inefficient since single tast is too fast, do it batched
-    ##     tasks = [(os.path.join(source, file), os.path.join(dest, file)) for file in selected_files]
-    ##     results = list(pool.imap_unordered(apply_f, tasks))
-    ##     # todo: check if cm already do the below
-    ##     # pool.close()  # Prevents any more tasks from being submitted to the pool
-    ##     # pool.join()   # Wait for the worker processes to terminate
+    # print('num processes:', args.processes)
+    # with TimeThis():
+    # with mp.Pool(args.processes) as pool: # TODO: this is probably inefficient since single tast is too fast, do it batched
+    # tasks = [(os.path.join(source, file), os.path.join(dest, file)) for file in selected_files]
+    # results = list(pool.imap_unordered(apply_f, tasks))
+    # todo: check if cm already do the below
+    # pool.close()  # Prevents any more tasks from being submitted to the pool
+    # pool.join()   # Wait for the worker processes to terminate
 
     # def f_batch(_source, _dest, batch):
     #   for file in batch:
@@ -83,8 +89,7 @@ if __name__ == "__main__":
     # with Pool(processes=cpu_count()) as pool:
     #   pool.map(f_batched, batches)
 
-    tasks = [(os.path.join(source, file), os.path.join(dest, file)) for file in selected_files]
+    tasks = [(os.path.join(source, file), os.path.join(dest, file))
+             for file in selected_files]
     with ProcessPoolExecutor() as executor:
-      list(tqdm(executor.map(apply_f, tasks, chunksize=1000), total=len(tasks)))
-
-
+        list(tqdm(executor.map(apply_f, tasks, chunksize=1000), total=len(tasks)))
