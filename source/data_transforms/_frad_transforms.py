@@ -5,9 +5,11 @@ from rdkit import Chem
 from source.utils.mol_utils import smi_reader_params, get_energy, set_coords, minimum_atom_distance
 import random
 from scipy.spatial.distance import pdist
+from copy import deepcopy
 
 
-def do_not_nosify_mol(data):
+def do_not_nosify_mol(data, og_pos):
+    data.noise_target = og_pos
     data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
     return data
 
@@ -200,17 +202,16 @@ def frad(data, dihedral_scale: float = 40.0, k: int = 2, max_n_attempts: int = 5
     '''
     # n_attempts = 0
     # while n_attempts <= max_n_attempts:
+    og_pos = deepcopy(data.pos)
     try:
-        coords = apply_dihedral_noise(data, dihedral_scale)
+        coords = apply_dihedral_noise(data, dihedral_scale) #! is this inplace? if so what should i do if exception is thrown or check below not good?
         if np.min(pdist(coords, 'euclidean')) < min_interatomic_dist_required:
-            do_not_nosify_mol(data)
+            return do_not_nosify_mol(data, og_pos)
     except:
-        return do_not_nosify_mol(data)
+        return do_not_nosify_mol(data, og_pos)
         # n_attempts +=1
 
-    update_coords, coords_noise_to_be_predicted = apply_coords_noise(
-        coords, add_coords_noise)
+    update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)
     data.pos = update_coords.to(torch.float32)
-    data.noise_target = torch.tensor(
-        coords_noise_to_be_predicted, dtype=torch.float32)
+    data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float32)
     return data
