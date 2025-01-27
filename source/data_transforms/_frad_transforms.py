@@ -111,8 +111,7 @@ def set_dihedral_angle(coords, i, j, k, l, current_angle_deg, desired_angle_deg,
 def apply_all_dihedrals(coords, rotable_bonds, original_dihedral_angles_degrees, desired_dihedral_angles_degrees, adjacency_matrix):
     """Apply all desired dihedral angles to the coordinates."""
     for (i, j, k, l), old_angle, new_angle in zip(rotable_bonds, original_dihedral_angles_degrees, desired_dihedral_angles_degrees):
-        coords = set_dihedral_angle(
-            coords, i, j, k, l, old_angle, new_angle, adjacency_matrix)
+        coords = set_dihedral_angle(coords, i, j, k, l, old_angle, new_angle, adjacency_matrix)
     return coords
 
 
@@ -124,23 +123,20 @@ def apply_dihedral_noise(data, scale: float):
     original_dihedral_angles_degrees = data.dihedral_angles_degrees
 
     # sample and clip to [-180.0, +180.0]
-    noise = np.random.normal(
-        0, scale, size=original_dihedral_angles_degrees.shape)
+    noise = np.random.normal(0, scale, size=original_dihedral_angles_degrees.shape)
     noise = np.clip(noise, a_min=-180.0, a_max=180.0)
 
     return apply_all_dihedrals(data.pos,
                                rotable_bonds,
                                original_dihedral_angles_degrees,
-                               # noised_dihedral_angles_degrees
-                               (original_dihedral_angles_degrees + noise).float(),
+                               (original_dihedral_angles_degrees + noise).float(), # noised_dihedral_angles_degrees
                                data.adj_matrix,
                                )  # coords
 
 
 def apply_coords_noise(coords, add_coords_noise: bool):
     '''sample and return coords noise'''
-    coords_noise_to_be_predicted = np.random.normal(
-        0, 1, size=coords.shape) * (coord_noise() if add_coords_noise else 0)
+    coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * (coord_noise() if add_coords_noise else 0)
     update_coords = coords + coords_noise_to_be_predicted
     return update_coords, coords_noise_to_be_predicted
 
@@ -204,11 +200,13 @@ def frad(data, dihedral_scale: float = 40.0, k: int = 2, max_n_attempts: int = 5
     # while n_attempts <= max_n_attempts:
     og_pos = deepcopy(data.pos)
     try:
-        coords = apply_dihedral_noise(data, dihedral_scale) #! is this inplace? if so what should i do if exception is thrown or check below not good?
+        coords = apply_dihedral_noise(data, dihedral_scale) # inplace op
         if np.min(pdist(coords, 'euclidean')) < min_interatomic_dist_required:
-            return do_not_nosify_mol(data, og_pos)
+            raise Exception("Minimum interatomic distance not satisfied")
     except:
-        return do_not_nosify_mol(data, og_pos)
+        # if error apply only coords noise
+        data = do_not_nosify_mol(data, og_pos)
+        coords = og_pos
         # n_attempts +=1
 
     update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)

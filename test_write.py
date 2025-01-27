@@ -62,7 +62,7 @@ if __name__ == '__main__':
   input_data = '/home/nobilm@usi.ch/pretrain_paper/data/guacamol_v1_all.smiles' # test_guac_smiles
   # smiles, targets = get_smiles_and_targets_from_csv(input_data)
   smiles = parse_smiles_file(input_data)
-  targets = [0] * len(smiles)
+  targets = [0] * len(smiles) # dummy target to match API
 
   # create dir
   dir = '/storage_common/nobilm/pretrain_paper/guacamol' #'/storage_common/nobilm/pretrain_paper/second_test'

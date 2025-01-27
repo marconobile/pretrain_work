@@ -14,24 +14,15 @@ from tqdm import tqdm
 parser_entries = [
     {'identifiers': ["-c", "--copy"], 'type': bool, 'optional': True},
     {'identifiers': ["-m", "--move"], 'type': bool, 'optional': True},
-    {'identifiers': ["-source", '--source'],
-        'type': str, 'help': 'Source path'},
-    {'identifiers': ["-dest", '--dest'],
-        'type': str, 'help': 'Destination path'},
-    {'identifiers': ["-n", '--n'], 'type': int,
-        'help': 'How many files to move/copy', 'optional': True, 'default': -1},
-    {'identifiers': ["-s", '--seed'], 'type': int,
-        'help': 'seed', 'default': 42},
-    {'identifiers': ["-p", '--processes'], 'type': int,
-        'help': 'num processes', 'default': 0},
+    {'identifiers': ["-source", '--source'],'type': str, 'help': 'Source path'},
+    {'identifiers': ["-dest", '--dest'],'type': str, 'help': 'Destination path'},
+    {'identifiers': ["-n", '--n'], 'type': int,'help': 'How many files to move/copy', 'optional': True, 'default': -1},
+    {'identifiers': ["-s", '--seed'], 'type': int,'help': 'seed', 'default': 42},
+    {'identifiers': ["-p", '--processes'], 'type': int,'help': 'num processes', 'default': 0},
 ]
 
 # example:
 # python source/utils/rand_cp_mv_npzs.py -c True -source /storage_common/nobilm/pretrain_paper/guacamol/kek_err -d /storage_common/nobilm/pretrain_paper/guacamol/testing_guac -n 50
-# python source/utils/rand_cp_mv_npzs.py -c True -source /storage_common/nobilm/pretrain_paper/guacamol/all -d /storage_common/nobilm/pretrain_paper/guacamol/one_million -n 1000000
-# python source/utils/rand_cp_mv_npzs.py -c True -source /storage_common/nobilm/pretrain_paper/guacamol/100k -d /storage_common/nobilm/pretrain_paper/guacamol/5k -n 5000 -p 80
-
-# python source/utils/rand_cp_mv_npzs.py -c True -source /storage_common/nobilm/pretrain_paper/guacamol/all -d /storage_common/nobilm/pretrain_paper/guacamol/500k -n 500000
 
 if __name__ == "__main__":
     args = MyArgPrsr(parser_entries)

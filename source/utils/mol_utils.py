@@ -115,7 +115,7 @@ def minimize_energy(mol):
 
 def drop_disconnected_components(inpt):
   '''
-  the assumption here is that the largest fragment is always the mol desired
+  assumption: largest fragment is always the mol desired
   '''
   if isinstance(inpt, rdChem.Mol): return max(rdChem.GetMolFrags(inpt, asMols=True), key=lambda frag: frag.GetNumAtoms())
   elif isinstance(inpt, str): return max(inpt.split('.'), key=len)
