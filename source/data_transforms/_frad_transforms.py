@@ -123,7 +123,7 @@ def frad(data:AtomicData, add_coords_noise: bool = True):
     apply_dihedral_noise_(data)
 
     if not add_coords_noise:
-        data.noise_target = torch.zeros(data.pos, dtype=torch.float32)
+        data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
         return data
 
     apply_coords_noise_(data)
