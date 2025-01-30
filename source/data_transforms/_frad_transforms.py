@@ -1,18 +1,9 @@
-import copy
 import torch
 import numpy as np
-from rdkit import Chem
-from source.utils.mol_utils import smi_reader_params, get_energy, set_coords, minimum_atom_distance
-import random
 from scipy.spatial.distance import pdist
 from copy import deepcopy
 
-
-def do_not_nosify_mol(data, og_pos):
-    data.noise_target = og_pos
-    data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
-    return data
-
+from geqtrain.data.AtomicData import AtomicData
 
 def rotate_around_bond(coords, j, k, angle_diff_rad, atoms_to_rotate):
     """
@@ -46,11 +37,11 @@ def rotate_around_bond(coords, j, k, angle_diff_rad, atoms_to_rotate):
                     (1-c) + ax*s,  c + az*az*(1-c)])
     ])
 
-    for atom_idx in atoms_to_rotate:
-        vec = coords[atom_idx] - p_j
-        vec_rot = torch.matmul(R, vec)
-        coords[atom_idx] = vec_rot + p_j
-    return coords
+    # for atom_idx in atoms_to_rotate:
+    #     vec = coords[atom_idx] - p_j
+    #     vec_rot = torch.matmul(R.float(), vec)
+    #     coords[atom_idx] = vec_rot + p_j
+    coords[atoms_to_rotate] = (coords[atoms_to_rotate] - p_j) @ R.float().T + p_j
 
 
 def find_downstream_atoms(adjacency_matrix, j, k):
@@ -62,13 +53,11 @@ def find_downstream_atoms(adjacency_matrix, j, k):
     adjacency_matrix: NxN boolean or 0/1 torch tensor
     j, k: indices of the pivot bond atoms
     """
-    N = adjacency_matrix.size(0)
-    # Copy adjacency to avoid permanent changes
-    adj_copy = adjacency_matrix.clone()
+    N = adjacency_matrix.shape[0]
 
     # Remove the j-k bond to prevent going "upstream"
-    adj_copy[j, k] = False
-    adj_copy[k, j] = False
+    adjacency_matrix[j, k] = False
+    adjacency_matrix[k, j] = False
 
     # BFS starting from k
     visited = torch.zeros(N, dtype=torch.bool)
@@ -78,7 +67,7 @@ def find_downstream_atoms(adjacency_matrix, j, k):
     while queue:
         current = queue.pop(0)
         # Explore neighbors
-        neighbors = torch.nonzero(adj_copy[current], as_tuple=False).flatten()
+        neighbors = torch.nonzero(torch.tensor(adjacency_matrix[current]), as_tuple=False).flatten()
         for nbr in neighbors:
             nbr = nbr.item()
             if not visited[nbr]:
@@ -89,127 +78,53 @@ def find_downstream_atoms(adjacency_matrix, j, k):
     return torch.nonzero(visited, as_tuple=False).flatten().tolist()
 
 
-def set_dihedral_angle(coords, i, j, k, l, current_angle_deg, desired_angle_deg, adjacency_matrix):
+def set_dihedral_angle_(coords, j, k, current_angle_deg, desired_angle_deg, adjacency_matrix):
     """
     Set the dihedral angle defined by atoms (i, j, k, l) to the desired_angle_deg.
-    This function modifies coords in place.
-
+    This function modifies coords in-place.
     Using the adjacency_matrix to find all downstream atoms from the bond (j, k).
     """
-    # Convert the difference to radians before performing the rotation
-    angle_diff = desired_angle_deg - current_angle_deg
-    angle_diff_rad = torch.deg2rad(angle_diff.clone().detach())
-
-    # Find downstream atoms
+    # Convert the difference to radians before performing the rotation, since Rodrigues' rotation formula in rotate_around_bond(...) requires angle in radiants
+    angle_diff_rad = torch.deg2rad(torch.tensor(desired_angle_deg - current_angle_deg))
+    # find all atoms moved by the single rotation of torsional
     downstream_atoms = find_downstream_atoms(adjacency_matrix, j, k)
-
-    # Rotate all downstream atoms
-    # coords
-    return rotate_around_bond(coords, j, k, angle_diff_rad, downstream_atoms)
-
-
-def apply_all_dihedrals(coords, rotable_bonds, original_dihedral_angles_degrees, desired_dihedral_angles_degrees, adjacency_matrix):
-    """Apply all desired dihedral angles to the coordinates."""
-    for (i, j, k, l), old_angle, new_angle in zip(rotable_bonds, original_dihedral_angles_degrees, desired_dihedral_angles_degrees):
-        coords = set_dihedral_angle(coords, i, j, k, l, old_angle, new_angle, adjacency_matrix)
-    return coords
-
-
-def apply_dihedral_noise(data, scale: float):
-    '''sample and apply dihedral noise'''
-    rotable_bonds = data.rotable_bonds.tolist()
-    if not rotable_bonds:
-        return data
-    original_dihedral_angles_degrees = data.dihedral_angles_degrees
-
-    # sample and clip to [-180.0, +180.0]
-    noise = np.random.normal(0, scale, size=original_dihedral_angles_degrees.shape)
-    noise = np.clip(noise, a_min=-180.0, a_max=180.0)
-
-    return apply_all_dihedrals(data.pos,
-                               rotable_bonds,
-                               original_dihedral_angles_degrees,
-                               (original_dihedral_angles_degrees + noise).float(), # noised_dihedral_angles_degrees
-                               data.adj_matrix,
-                               )  # coords
-
-
-def apply_coords_noise(coords, add_coords_noise: bool):
-    '''sample and return coords noise'''
-    coords_noise_to_be_predicted = np.random.normal(0, 1, size=coords.shape) * (coord_noise() if add_coords_noise else 0)
-    update_coords = coords + coords_noise_to_be_predicted
-    return update_coords, coords_noise_to_be_predicted
-
-
-def coord_noise(linspace_start: float = 0.1, linspace_end: float = 0.001, int_start: int = 1, int_end: int = 5, steps: int = 100):
-    '''returns a random value between 0.5 and 0.001 if using defaults'''
-    # 1. Create a linspace from linspace_start to linspace_end
-    linspace = torch.linspace(linspace_start, linspace_end, steps=steps)
-
-    # 2. Sample randomly 1 value out of the above-created linspace
-    linspace_sample = random.choice(linspace.tolist())
-
-    # 3. Sample uniformly an integer between int_start and int_end
-    int_sample = random.randint(int_start, int_end)
-
-    # 4. Multiply the sampled values
-    return linspace_sample * int_sample
-
-# # https://openkim.org/files/MO_959249795837_003/LennardJones612_UniversalShifted.params : 2**(1/6) * 0.5523570 = 0.62
-# # .8
-# def frad(data, dihedral_scale:float=40.0, k:int=2, max_n_attempts:int=5, min_interatomic_dist_required:float=0.62, add_coords_noise:bool=True): #! hyperparams here
-#   '''
-#   modifies data inplace
-#   dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
-#   k: if (energy of noised conformer) > (k*|energy_min - energy_max|): resample
-
-#   minimum_atom_distance 100 calls execution time: 22.7377 seconds
-#   get_energy 100 calls execution time: 204.9748 seconds
-#   '''
-#   n_attempts = 0
-#   while n_attempts <= max_n_attempts:
-#     # sample modifications to conf from starting-conf
-#     coords = apply_dihedral_noise(data, dihedral_scale)
-#     # mol = Chem.MolFromSmiles(str(data.smiles), smi_reader_params()) # to be kept inside the while to avoid "energy" locks
-#     # mol = Chem.AddHs(mol, addCoords=True)
-#     # mol = set_coords(mol, coords)
-#     # print(f"Attempt: {n_attempts}, sampled conf energy: {get_energy(mol)}, original conf energy: {data.max_energy}, threshold energy: {k*data.max_energy}, min dist between atoms:  {minimum_atom_distance(mol)}")
-#     # if (minimum_atom_distance(mol) > min_interatomic_dist_required) and (get_energy(mol) <= torch.abs(k*data.max_energy)): break
-#     if np.min(pdist(coords, 'euclidean')) > min_interatomic_dist_required: break
-#     n_attempts +=1
-#     # k+=1.5
-
-#   update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)
-#   data.pos = update_coords.to(torch.float32)
-#   data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float32)
-#   return data
-
+    rotate_around_bond(coords, j, k, angle_diff_rad, downstream_atoms)
 
 # https://openkim.org/files/MO_959249795837_003/LennardJones612_UniversalShifted.params : 2**(1/6) * 0.5523570 = 0.62
-# .8
-def frad(data, dihedral_scale: float = 40.0, k: int = 2, max_n_attempts: int = 5, min_interatomic_dist_required: float = 0.62, add_coords_noise: bool = True):  # ! hyperparams here
+def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_interatomic_dist_required: float = 0.62):
     '''
-    modifies data inplace
-    dihedral_scale: std of (clipped) norm dist from which to sample the noise to add at torsional angles
-    k: if (energy of noised conformer) > (k*|energy_min - energy_max|): resample
-
-    minimum_atom_distance 100 calls execution time: 22.7377 seconds
-    get_energy 100 calls execution time: 204.9748 seconds
+    dihedral_scale: std of norm dist from which to sample the noise to add at torsional angles
     '''
-    # n_attempts = 0
-    # while n_attempts <= max_n_attempts:
-    og_pos = deepcopy(data.pos)
-    try:
-        coords = apply_dihedral_noise(data, dihedral_scale) # inplace op
-        if np.min(pdist(coords, 'euclidean')) < min_interatomic_dist_required:
-            raise Exception("Minimum interatomic distance not satisfied")
-    except:
-        # if error apply only coords noise
-        data = do_not_nosify_mol(data, og_pos)
-        coords = og_pos
-        # n_attempts +=1
+    if not data.rotable_bonds.size:
+        return data
 
-    update_coords, coords_noise_to_be_predicted = apply_coords_noise(coords, add_coords_noise)
-    data.pos = update_coords.to(torch.float32)
-    data.noise_target = torch.tensor(coords_noise_to_be_predicted, dtype=torch.float32)
+    original_dihedral_angles_degrees = data.dihedral_angles_degrees
+    noise = np.random.normal(0, dihedral_scale, size=original_dihedral_angles_degrees.shape)
+    desired_dihedral_angles_degrees = original_dihedral_angles_degrees + noise
+
+    og_pos = data.pos.clone()
+    for (_, j, k, _), old_angle, new_angle in zip(data.rotable_bonds, original_dihedral_angles_degrees, desired_dihedral_angles_degrees):
+        set_dihedral_angle_(data.pos, j, k, old_angle, new_angle, data.adj_matrix)
+
+    if np.min(pdist(data.pos, 'euclidean')) <= min_interatomic_dist_required:
+        data.pos = og_pos # undo
+
+
+def apply_coords_noise_(data:AtomicData):
+    '''sample and return coords noise
+    std of noise is unformly sampled between min:float=0.004, max:float=0.3
+    '''
+    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * np.random.uniform(0.004, 0.3)).to(torch.float32)
+    data.pos += data.noise_target
+
+def frad(data:AtomicData, add_coords_noise: bool = True):
+
+    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+    apply_dihedral_noise_(data)
+
+    if not add_coords_noise:
+        data.noise_target = torch.zeros(data.pos, dtype=torch.float32)
+        return data
+
+    apply_coords_noise_(data)
     return data
