@@ -1,7 +1,7 @@
 import os
 import torch
 import numpy as np
-from .file_handling_utils import ls
+from .file_handling_utils import ls, silentremove
 from typing import List, Union
 import numpy as np
 from types import SimpleNamespace
@@ -138,3 +138,24 @@ def save_pyg_as_npz(g, file, f:callable=lambda y:y, check:bool=False):
   # Save the data using np.savez
   np.savez(file=file, **filtered_data)
 
+
+def get_smiles_and_filepaths_from_valid_npz(npz_dir):
+    smiles, filepaths = [], []
+    for npz_file in ls(npz_dir):
+        if not test_npz_validity(npz_file):
+            continue
+        npz = get_field_from_npzs(npz_file)
+        filepaths.append(str(npz[0].zip.filename))
+        smiles.append(str(npz[0]['smiles']))
+    assert len(smiles) == len(filepaths)
+    return smiles, filepaths
+
+
+def test_npz_validity(file):
+    try:
+        np.load(file, allow_pickle=True)
+        return True
+    except Exception as e:
+        print(f'Error loading {file}: {e}. Removed {file}')
+        silentremove(file)
+        return False
