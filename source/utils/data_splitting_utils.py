@@ -10,18 +10,45 @@ from typing import Union, List
 
 
 
-def scaffold_splitter(smile_list, frac_train: float = 0.8, frac_valid: float = 0.1, frac_test: float = 0.1, seed: int=42) -> Union[List[str], List[str], List[str]]:
-  '''https://deepchem.readthedocs.io/en/latest/api_reference/splitters.html#scaffoldsplitter'''
-  fake_x = np.zeros(len(smile_list))
-  fake_y = np.ones(len(smile_list))
-  # creation of a deepchem dataset with the smile codes in the ids field
-  dataset = dc.data.DiskDataset.from_numpy(X=fake_x,y=fake_y,w=np.zeros(len(smile_list)),ids=smile_list)
-  scaffoldsplitter = dc.splits.ScaffoldSplitter()
-  train_idxs, val_idxs, test_idxs = scaffoldsplitter.split(dataset, frac_train, frac_valid, frac_test, seed)
-  train_smiles = [smile_list[index] for index in train_idxs]
-  val_smiles = [smile_list[index] for index in val_idxs]
-  test_smiles = [smile_list[index] for index in test_idxs]
-  return train_smiles,val_smiles,test_smiles
+def scaffold_splitter(smile_list:List[str], save_dir, filepath_list:List[str]=None, frac_train: float = 0.8, frac_valid: float = 0.1, frac_test: float = 0.1, seed: int=42):
+    '''https://deepchem.readthedocs.io/en/latest/api_reference/splitters.html#scaffoldsplitter
+    https://deepchem.readthedocs.io/en/latest/api_reference/data.html#deepchem.data.DiskDataset.from_numpy
+
+    save_dir – The directory to write this dataset to. If 'tmp' is specified, will use a default temporary directory instead.
+
+    example usage:
+    dir = '/storage_common/nobilm/pretrain_paper/guacamol/5k'
+    smiles, filepaths = get_smiles_and_filepaths_from_valid_npz(dir)
+    train_smiles,val_smiles,test_smiles=scaffold_splitter(smile_list=smiles, save_dir='tmp', filepath_list=filepaths)
+
+    # TODO
+    # 1) create folders train/val/test_smiles
+    # 2) copy from target dir to created dirs wrt filepath
+    '''
+    if save_dir == 'tmp':
+        save_dir = None
+
+    _ = np.zeros(len(smile_list))
+    # creation of a deepchem dataset with the smile codes in the ids field
+    if filepath_list:
+        dataset = dc.data.DiskDataset.from_numpy(X=filepath_list,y=_,w=_,ids=smile_list, data_dir=save_dir)
+    else:
+        dataset = dc.data.DiskDataset.from_numpy(X=_,y=_,w=_,ids=smile_list, data_dir=save_dir)
+
+    scaffoldsplitter = dc.splits.ScaffoldSplitter()
+    train_idxs, val_idxs, test_idxs = scaffoldsplitter.split(dataset, frac_train, frac_valid, frac_test, seed)
+
+    # ugly but avoids N bool condition eval, keep same out List[Dict] format
+    if filepath_list:
+        train_smiles = [{'filepath':dataset.X[i], 'smiles':smile_list[i]} for i in train_idxs]
+        val_smiles = [{'filepath':dataset.X[i], 'smiles':smile_list[i]} for i in val_idxs]
+        test_smiles = [{'filepath':dataset.X[i], 'smiles':smile_list[i]} for i in test_idxs]
+    else:
+        train_smiles = [{'smiles':smile_list[i]} for i in train_idxs]
+        val_smiles = [{'smiles':smile_list[i]} for i in val_idxs]
+        test_smiles = [{'smiles':smile_list[i]} for i in test_idxs]
+
+    return train_smiles,val_smiles,test_smiles
 
 
 def get_smiles_and_targets_from_csv(path):
