@@ -12,12 +12,9 @@ from functools import partial
 
 
 parser_entries = [
-    {'identifiers': ["-p", '--path'], 'type': str,
-        'help': 'Path from where to rm'},
-    {'identifiers': ["-n", '--n'], 'type': int,
-        'help': 'How many files to rm'},
-    {'identifiers': ["-s", '--seed'], 'type': int,
-        'help': 'seed', 'default': 42},
+    {'identifiers': ["-p", '--path'], 'type': str, 'help': 'Path from where to rm'},
+    {'identifiers': ["-n", '--n'], 'type': int, 'help': 'How many files to rm'},
+    {'identifiers': ["-s", '--seed'], 'type': int, 'help': 'seed', 'default': 42},
     # TODO add filter for ext
 ]
 
@@ -44,8 +41,7 @@ if __name__ == "__main__":
     f = partial(delete_batch, path)
 
     batch_size = 100
-    batches = [selected_files[i:i + batch_size]
-               for i in range(0, len(selected_files), batch_size)]
+    batches = [selected_files[i:i + batch_size] for i in range(0, len(selected_files), batch_size)]
 
     with Pool(processes=10) as pool:
         pool.map(f, batches)

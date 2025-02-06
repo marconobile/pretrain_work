@@ -1,3 +1,4 @@
+import re
 import os
 import shutil
 import random
@@ -18,7 +19,7 @@ parser_entries = [
     {'identifiers': ["-dest", '--dest'],'type': str, 'help': 'Destination path'},
     {'identifiers': ["-n", '--n'], 'type': int,'help': 'How many files to move/copy', 'optional': True, 'default': -1},
     {'identifiers': ["-s", '--seed'], 'type': int,'help': 'seed', 'default': 42},
-    {'identifiers': ["-p", '--processes'], 'type': int,'help': 'num processes', 'default': 0},
+    {'identifiers': ["-p", '--processes'], 'type': int,'help': 'num processes', 'default': 10},
 ]
 
 # example:
@@ -49,8 +50,10 @@ if __name__ == "__main__":
 
     # Copy/Move selected files to dest
     f = shutil.copy if copy else shutil.move
+    f_name = re.search(r"(?<=<function )\w+", f.__repr__()).group()
 
-    user_input = input(f"Executing: {f}. Continue? (y/n): ").strip().lower()
+    user_input = input(f"Executing: {f_name}\nFrom: {source}\nTo: {dest} \nContinue? (y/n): ").strip().lower()
+
     if user_input in ['no', 'n']:
         print("Operation aborted.")
         exit(0)
@@ -60,7 +63,7 @@ if __name__ == "__main__":
         src, dst = src_dst_tuple
         f(src, dst)
 
-    # print('num processes:', args.processes)
+    print('num processes:', args.processes)
     # with TimeThis():
     # with mp.Pool(args.processes) as pool: # TODO: this is probably inefficient since single tast is too fast, do it batched
     # tasks = [(os.path.join(source, file), os.path.join(dest, file)) for file in selected_files]
@@ -80,7 +83,6 @@ if __name__ == "__main__":
     # with Pool(processes=cpu_count()) as pool:
     #   pool.map(f_batched, batches)
 
-    tasks = [(os.path.join(source, file), os.path.join(dest, file))
-             for file in selected_files]
-    with ProcessPoolExecutor() as executor:
-        list(tqdm(executor.map(apply_f, tasks, chunksize=1000), total=len(tasks)))
+    tasks = [(os.path.join(source, file), os.path.join(dest, file)) for file in selected_files]
+    with ProcessPoolExecutor(args.processes) as executor:
+        executor.map(apply_f, tasks, chunksize=1000)

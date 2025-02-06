@@ -8,7 +8,6 @@ import sys
 from rdkit import Chem as rdChem
 import numpy as np
 import tempfile
-import CDPL.Chem as Chem
 import CDPL.ConfGen as ConfGen
 import CDPL.Chem as CDPLChem
 from source.utils.mol_utils import get_dihedral_angles, get_rdkit_conformer, minimize_energy, smi_reader_params
@@ -17,12 +16,12 @@ from globals import *
 from source.utils.file_handling_utils import silentremove
 
 
-def generateConformationEnsembles(mol: Chem.BasicMolecule, conf_gen: ConfGen.ConformerGenerator):
+def generateConformationEnsembles(mol: CDPLChem.BasicMolecule, conf_gen: ConfGen.ConformerGenerator):
   """
   Generates a conformation ensemble for the argument molecule using the provided initialized ConfGen.ConformerGenerator instance.
 
   Parameters:
-  - mol (Chem.BasicMolecule): Molecule to generate a conformation ensemble for.
+  - mol (CDPLChem.BasicMolecule): Molecule to generate a conformation ensemble for.
   - conf_gen (ConfGen.ConformerGenerator): Instance of the ConfGen.ConformerGenerator class.
 
   Returns:
@@ -45,15 +44,16 @@ def generateConformationEnsembles(mol: Chem.BasicMolecule, conf_gen: ConfGen.Con
   return (status, num_confs)
 
 
-def get_conformer_generator(max_time:int=36000): # TODO cast to time
+def get_conformer_generator(max_num_out_confs:int, max_time:int=36000): # TODO cast to time
     '''
     Settings
-    max_confs: Max. output ensemble size
+    max_confs: Max. output ensemble size (only effective in stochastic sampling mode, default: 2000, must be >= 0, 0 disables limit).
     max_time:  Max. allowed molecule processing time in seconds (default: 3600 sec)
     min_rmsd:  Output conformer RMSD threshold (default: 0.5):
-      if (conformer_rmsd_wrt_og < min_rmsd) then drop conformer; if not distant enough the drop
-      increasing min_rmsd thus variance is increased
-    e_window:  Output conformer energy window (default: 20.0)
+      for conf in ensemble: if (conf - current sample) < min_rmsd: drop conformer (i.e. if not different enough then drop)
+      increasing min_rmsd higher variance in out confs is requested
+      conformer is selected as an output conformer only if the heavy-atom RMSD between the current conformer and any of the previously selected output conformers is not below a specified threshold value
+    e_window:  Output conformer energy window (default: 20.0): keep running min energy value while generating conformers; reject if min + e_window is exceeded
 
     Create and initialize an instance of the class ConfGen.ConformerGenerator which
     will perform the actual conformer ensemble generation work
@@ -65,11 +65,12 @@ def get_conformer_generator(max_time:int=36000): # TODO cast to time
     conf_gen.settings.timeout = max_time
     conf_gen.settings.minRMSD = min_rmsd
     conf_gen.settings.energyWindow = e_window
-    conf_gen.settings.maxNumOutputConformers = max_confs
-    # conf_gen.settings.setSamplingMode(2)
+    conf_gen.settings.setMaxNumOutputConformers(max_num_out_confs)
+    # conf_gen.settings.maxNumOutputConformers = max_confs
     # AUTO       = 0;
     # SYSTEMATIC = 1;
     # STOCHASTIC = 2;
+    conf_gen.settings.setSamplingMode(1)
     return conf_gen
 
 
@@ -86,7 +87,6 @@ def generate_conformers_rdkit(smi:str):
   return load_conformers_from_sdf(tmp_mol_ensemble, n_confs_to_keep)
 
 
-
 def generate_conformers(smi:str, conf_gen:ConfGen.ConformerGenerator):
   mol = CDPLChem.parseSMILES(smi)
   status, num_confs = generateConformationEnsembles(mol, conf_gen)
@@ -97,11 +97,11 @@ def generate_conformers(smi:str, conf_gen:ConfGen.ConformerGenerator):
 
   with tempfile.NamedTemporaryFile(dir='/home/nobilm@usi.ch/pretrain_paper/tmp/', delete=True) as tmp_file:
     unique_filename = tmp_file.name + ".sdf"
-    writer = Chem.MolecularGraphWriter(unique_filename)
+    writer = CDPLChem.MolecularGraphWriter(unique_filename)
     if not writer.write(mol):
-      writer.close()
-      silentremove(unique_filename)
-      sys.exit('Error: output of conformer ensemble for molecule %s failed' % smi)
+        writer.close()
+        silentremove(unique_filename)
+        sys.exit('Error: output of conformer ensemble for molecule %s failed' % smi)
     writer.close()
     tmp_mol_ensemble = list(rdChem.rdmolfiles.SDMolSupplier(unique_filename, removeHs=False))
     silentremove(unique_filename)

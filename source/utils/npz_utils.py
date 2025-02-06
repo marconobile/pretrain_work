@@ -1,11 +1,11 @@
 import os
-import torch
 import numpy as np
 from .file_handling_utils import ls, silentremove
-from typing import List, Union
+from typing import List, Union, Tuple
 import numpy as np
 from types import SimpleNamespace
-
+from .data_splitting_utils import create_data_folders
+from pathlib import Path
 
 def get_field_from_npzs(path:str, field:Union[str, List]='*'):
   '''
@@ -25,13 +25,14 @@ def get_field_from_npzs(path:str, field:Union[str, List]='*'):
   for npz in ls(path):
     data = np.load(npz)
     sn  = SimpleNamespace()
-    for f in field: sn.__setattr__(f, data[f].item())
+    for f in field:
+        sn.__setattr__(f, data[f].item())
     sn.__setattr__("path", path)
     out.append(sn)
   return out
 
 
-def save_npz(pyg_mols, f:callable=lambda y:y, folder_name:str=None, N:int=None, check=True, idx:int=0):
+def save_npz(pyg_mols, folder_name:str=None, N:int=None, idx:int=0):
     '''
     pyg_mols: list of pytorch geometric data objects
     f: func to apply to each g['y'], more below
@@ -71,81 +72,47 @@ def save_npz(pyg_mols, f:callable=lambda y:y, folder_name:str=None, N:int=None, 
     is_in_ring
     (5,)
     '''
-    if N: pyg_mols = pyg_mols[:N]
+
+    all_dir, _, _, _ = create_data_folders(folder_name)
+    print('Saving npzs in: ', all_dir)
+    if N:
+        pyg_mols = pyg_mols[:N]
+
     for pyg_m in pyg_mols:
-      save_pyg_as_npz(pyg_m, f'{folder_name}/mol_{idx}', f, check)
-      idx +=1
+        save_pyg_as_npz(pyg_m, f'{all_dir}/mol_{idx}')
+        idx +=1
+
     return idx
 
 
-def save_pyg_as_npz(g, file, f:callable=lambda y:y, check:bool=False):
-  data = {}
-  data['coords'] = g['pos'].numpy() if g['pos'].dim() == 3 else  g['pos'].unsqueeze(0).numpy()  # (1, N, 3)
-  # in general: if fixed field it must be (N,), else (1, N)
-  data['atom_types'] = g['atom_types'].numpy()
-  data['group'] = g['group'].numpy()
-  data['period'] = g['period'].numpy()
-  # edge_index = g['edge_index'].unsqueeze(0).numpy() # (1, 2, E)
-  # edge_attr = g['edge_attr'].unsqueeze(0).numpy() # (1, E, Edg_attr_dims)
-  data['hybridization'] = g['hybridization'].numpy()  # (N, )
-  data['chirality'] = g['chirality'].numpy()  # (N, )
-  data['is_aromatic'] = g['is_aromatic'].numpy()  # (N, )
-  data['is_in_ring'] = g['is_in_ring'].numpy()  # (N, )
-  data['smiles'] = g['smiles']
-  data['adj_matrix'] = g['adj_matrix'].numpy()
-  data['max_energy'] = g['max_energy']
-  data['rotable_bonds'] = g['rotable_bonds'].numpy()
-  data['dihedral_angles_degrees'] = g['dihedral_angles_degrees'].numpy()
+def save_pyg_as_npz(g, filepath:str|Path):
 
-  data['graph_labels'] = f(g['y'])
-  if isinstance(data['graph_labels'], torch.Tensor): data['graph_labels'] = data['graph_labels'].numpy()
+    # if fixed field it must be (N,), else (1, N)
+    g['coords'] = g['pos'] if g['pos'].dim() == 3 else g['pos'].unsqueeze(0)  # (1, N, 3)
+    g['graph_labels'] = g['y']
 
-  if check:  # this works iif all are fixed fields
-    # coords
-    # eg shape: (1, 66, 3)
-    assert len(coords.shape) == 3, f"coords shape is {coords.shape}"
-    B, N, D = coords.shape
-    assert B == coords.shape[0]
-    assert D == 3
+    # edge_index = g['edge_index'].unsqueeze(0) # (1, 2, E)
+    # edge_attr = g['edge_attr'].unsqueeze(0) # (1, E, Edg_attr_dims)
 
-    # atom_types
-    # eg shape: (66,)
-    assert len(atom_types.shape) == 1
-    assert len(group.shape) == 1
-    assert len(period.shape) == 1
+    # Filter out the None values and downcast
+    filtered_data = {}
+    for k, v in g:
+        if v is not None:
+            try: v = v.numpy()
+            except: pass
+            filtered_data[k] = v
 
-    assert len(hybridization.shape) == 1
-    assert len(chirality.shape) == 1
-    assert len(is_aromatic.shape) == 1
-    assert len(is_in_ring.shape) == 1
-
-    # assert atom_types.shape[0] == N
-    assert hybridization.shape[0] == N
-    assert chirality.shape[0] == N
-    assert is_aromatic.shape[0] == N
-    assert is_in_ring.shape[0] == N
+    np.savez(file=filepath, **filtered_data)
+    test_npz_validity(filepath+".npz")
 
 
-
-    # graph_labels
-    # eg shape: (1, 1)
-    # assert len(graph_labels.shape) == 2
-    # assert graph_labels.shape[0] == 1
-
-  # Filter out the None values
-  filtered_data = {k: v for k, v in data.items() if v is not None}
-
-  # Save the data using np.savez
-  np.savez(file=file, **filtered_data)
-
-
-def get_smiles_and_filepaths_from_valid_npz(npz_dir):
+def get_smiles_and_filepaths_from_valid_npz(npz_dir:str|Path) -> Tuple[str, Path]:
     smiles, filepaths = [], []
     for npz_file in ls(npz_dir):
         if not test_npz_validity(npz_file):
             continue
         npz = get_field_from_npzs(npz_file)
-        filepaths.append(str(npz[0].zip.filename))
+        filepaths.append(Path(str(npz[0].zip.filename)))
         smiles.append(str(npz[0]['smiles']))
     assert len(smiles) == len(filepaths)
     return smiles, filepaths

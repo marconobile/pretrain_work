@@ -114,12 +114,12 @@ def minimize_energy(mol):
 
 
 def drop_disconnected_components(inpt):
-  '''
-  assumption: largest fragment is always the mol desired
-  '''
-  if isinstance(inpt, rdChem.Mol): return max(rdChem.GetMolFrags(inpt, asMols=True), key=lambda frag: frag.GetNumAtoms())
-  elif isinstance(inpt, str): return max(inpt.split('.'), key=len)
-  raise ValueError(f"inpt type {type(inpt)} not supported, it must be str or rdkit mol")
+    '''assumption: largest fragment is always the mol desired'''
+    if isinstance(inpt, rdChem.Mol):
+        return max(rdChem.GetMolFrags(inpt, asMols=True), key=lambda frag: frag.GetNumAtoms())
+    elif isinstance(inpt, str):
+        return max(inpt.split('.'), key=len)
+    raise ValueError(f"inpt type {type(inpt)} not supported, it must be str or rdkit mol")
 
 
 def preprocess_mol(m:rdChem.Mol,
@@ -196,43 +196,6 @@ def set_coords(mol, coords: torch.tensor):
   return new_mol
 
 
-def has_steric_clashes(mol, clash_distance_threshold=0.8):
-    """
-    Check if the molecule has steric clashes based on atom distances.
-
-    Parameters:
-    - mol: RDKit molecule object with a 3D conformer.
-    - clash_distance_threshold: Distance threshold below which atoms are considered to clash.
-
-    Returns:
-    - bool: True if the molecule has steric clashes, False otherwise.
-
-    Example usage
-    Load an example molecule (here, we use a SMILES string and generate a 3D conformation)
-    smiles = 'CCO'
-    mol = Chem.MolFromSmiles(smiles)
-    mol = Chem.AddHs(mol)
-    AllChem.EmbedMolecule(mol, randomSeed=42)
-    # Check for steric clashes
-    has_clashes = has_steric_clashes(mol)
-    print(f"Molecule has steric clashes: {has_clashes}")
-    """
-    if not mol.GetNumConformers():
-        raise ValueError("The molecule does not have any conformers.")
-
-    # Get the positions of all atoms in the first conformer
-    conf = mol.GetConformer()
-    positions = conf.GetPositions()
-
-    # Calculate distances between all pairs of atoms
-    num_atoms = mol.GetNumAtoms()
-    for i in range(num_atoms):
-        for j in range(i + 1, num_atoms):
-            distance = np.linalg.norm(positions[i] - positions[j])
-            if distance < clash_distance_threshold:
-                return True
-    return False
-
 #! the issue here is max_iterations (?)
 def fix_conformer(mol, max_iterations=200, force_field='UFF', convergence_criteria=1e-6):
     """
@@ -286,68 +249,3 @@ def fix_conformer(mol, max_iterations=200, force_field='UFF', convergence_criter
         print("Warning: The displacement is higher than the convergence criteria. Consider increasing the number of iterations.")
 
     return mol
-
-
-# def minimum_atom_distance(mol):
-#     """
-#     Calculate the minimum distance between any pair of atoms in the molecule.
-
-#     Parameters:
-#     - mol: RDKit molecule object with a 3D conformer.
-
-#     Returns:
-#     - float: The minimum distance between any pair of atoms in angstroms.
-
-#     Example usage
-#     Load an example molecule (here, we use a SMILES string and generate a 3D conformation)
-#     smiles = 'CCO'
-#     mol = Chem.MolFromSmiles(smiles)
-#     mol = Chem.AddHs(mol)
-#     AllChem.EmbedMolecule(mol, randomSeed=42)
-#     Calculate the minimum atom distance
-#     min_distance = minimum_atom_distance(mol)
-#     print(f"The minimum distance between any pair of atoms: {min_distance:.4f} Å")
-#     """
-#     if not mol.GetNumConformers(): raise ValueError("The molecule does not have any conformers.")
-
-#     # Get the positions of all atoms in the first conformer
-#     conf = mol.GetConformer()
-#     positions = conf.GetPositions()
-
-#     # Initialize the minimum distance to a large value
-#     min_distance = float('inf')
-
-#     # Calculate distances between all pairs of atoms
-#     num_atoms = mol.GetNumAtoms()
-#     for i in range(num_atoms):
-#         for j in range(i + 1, num_atoms):
-#             distance = np.linalg.norm(positions[i] - positions[j])
-#             if distance < min_distance:
-#                 min_distance = distance
-
-#     return min_distance
-
-def minimum_atom_distance(mol):
-    """
-    Calculate the minimum distance between any pair of atoms in the molecule.
-
-    Parameters:
-    - mol: RDKit molecule object with a 3D conformer.
-
-    Returns:
-    - float: The minimum distance between any pair of atoms in angstroms.
-    """
-    if not mol.GetNumConformers(): raise ValueError("The molecule does not have any conformers.")
-
-    # Get the positions of all atoms in the first conformer
-    conf = mol.GetConformer()
-    positions = np.array(conf.GetPositions())
-
-    # Calculate the pairwise distance matrix
-    distance_matrix = np.linalg.norm(positions[:, np.newaxis] - positions, axis=2)
-
-    # Mask the diagonal and get the minimum distance
-    np.fill_diagonal(distance_matrix, np.inf)
-    min_distance = np.min(distance_matrix)
-
-    return min_distance

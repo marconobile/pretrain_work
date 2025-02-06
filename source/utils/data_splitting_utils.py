@@ -1,64 +1,70 @@
 
-import deepchem as dc
-# pip install deepchem
+import deepchem as dc # pip install deepchem
 import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from random import shuffle
-from typing import Union, List
+from typing import Union, List, Tuple
+import shutil
 
 
-
-def scaffold_splitter(smile_list:List[str], save_dir, filepath_list:List[str]=None, frac_train: float = 0.8, frac_valid: float = 0.1, frac_test: float = 0.1, seed: int=42):
+def scaffold_splitter(
+        project_dir:str,
+        save_dir,
+        frac_train: float = 0.8,
+        frac_valid: float = 0.1,
+        frac_test: float = 0.1, seed: int=42
+    ):
     '''https://deepchem.readthedocs.io/en/latest/api_reference/splitters.html#scaffoldsplitter
     https://deepchem.readthedocs.io/en/latest/api_reference/data.html#deepchem.data.DiskDataset.from_numpy
-
     save_dir – The directory to write this dataset to. If 'tmp' is specified, will use a default temporary directory instead.
 
     example usage:
     dir = '/storage_common/nobilm/pretrain_paper/guacamol/5k'
-    smiles, filepaths = get_smiles_and_filepaths_from_valid_npz(dir)
-    train_smiles,val_smiles,test_smiles=scaffold_splitter(smile_list=smiles, save_dir='tmp', filepath_list=filepaths)
-
-    # TODO
-    # 1) create folders train/val/test_smiles
-    # 2) copy from target dir to created dirs wrt filepath
+    scaffold_splitter(dir, 'tmp') -> creates folders and distributes mols
     '''
+
+    from source.utils.npz_utils import get_smiles_and_filepaths_from_valid_npz
+
     if save_dir == 'tmp':
         save_dir = None
 
-    _ = np.zeros(len(smile_list))
-    # creation of a deepchem dataset with the smile codes in the ids field
-    if filepath_list:
-        dataset = dc.data.DiskDataset.from_numpy(X=filepath_list,y=_,w=_,ids=smile_list, data_dir=save_dir)
-    else:
-        dataset = dc.data.DiskDataset.from_numpy(X=_,y=_,w=_,ids=smile_list, data_dir=save_dir)
+    all_dir, train_dir, val_dir, test_dir = create_data_folders(project_dir, exist_ok=True) # pathlib.Path obj
+    assert not any(os.scandir(train_dir)), f"Directory '{train_dir}' is not empty."
+    assert not any(os.scandir(val_dir)), f"Directory '{val_dir}' is not empty."
+    assert not any(os.scandir(test_dir)), f"Directory '{test_dir}' is not empty."
 
+    assert all(
+       entry.is_file() and entry.name.endswith('.npz') and not entry.name.startswith('.') for entry in os.scandir(all_dir)
+    ), f"Directory '{all_dir}' contains non-.npz or hidden files."
+
+    smile_list, filepath_list = get_smiles_and_filepaths_from_valid_npz(all_dir)
+    _ = np.zeros(len(smile_list))
+
+    dataset = dc.data.DiskDataset.from_numpy(X=filepath_list, y=_, w=_, ids=smile_list, data_dir=save_dir)
+    # creation of a deepchem dataset with the smile codes in the ids field
     scaffoldsplitter = dc.splits.ScaffoldSplitter()
     train_idxs, val_idxs, test_idxs = scaffoldsplitter.split(dataset, frac_train, frac_valid, frac_test, seed)
 
-    # ugly but avoids N bool condition eval, keep same out List[Dict] format
-    if filepath_list:
-        train_smiles = [{'filepath':dataset.X[i], 'smiles':smile_list[i]} for i in train_idxs]
-        val_smiles = [{'filepath':dataset.X[i], 'smiles':smile_list[i]} for i in val_idxs]
-        test_smiles = [{'filepath':dataset.X[i], 'smiles':smile_list[i]} for i in test_idxs]
-    else:
-        train_smiles = [{'smiles':smile_list[i]} for i in train_idxs]
-        val_smiles = [{'smiles':smile_list[i]} for i in val_idxs]
-        test_smiles = [{'smiles':smile_list[i]} for i in test_idxs]
-
-    return train_smiles,val_smiles,test_smiles
+    for idx_set, dest_path in zip([train_idxs, val_idxs, test_idxs], [train_dir, val_dir, test_dir]):
+        for idx in idx_set:
+            source_path = dataset.X[idx] # pathlib.Path obj
+            destination_pathfile = dest_path / source_path.name
+            shutil.copy(source_path, destination_pathfile)
 
 
-def get_smiles_and_targets_from_csv(path):
-  '''the csv here processed have only 2 cols, where it is assumed that first col is smiles and second col is label'''
-  assert path.endswith(".csv"), f"{path} is not a valid .csv file"
-  dset = pd.read_csv(path)
-  smi_key, target_key = list(dset.keys())
-  smiles, y  = dset[smi_key].to_list(), dset[target_key].to_list()
-  assert len(smiles) == len(y)
-  return smiles, y
+def parse_csv(path, col_idxs:List[int]=None):
+    assert path.endswith(".csv"), f"{path} is not a valid .csv file"
+    dset = pd.read_csv(path)
+    names = list(dset.keys())
+    out = {}
+    for col_i in col_idxs:
+       out[names[col_i]] = dset[names[col_i]].to_list()
+
+    # Assert that all values in the dictionary have the same length
+    assert all(len(v) == len(next(iter(out.values()))) for v in out.values()), "All dictionary values must have the same length"
+    return out
 
 
 def parse_smiles_file(file_path):
@@ -79,10 +85,10 @@ def get_data_folders(dir):
   return Path(dir)/'all', Path(dir)/'train', Path(dir)/'val', Path(dir)/'test'
 
 
-def create_data_folders(dir):
-  r'''if not present, create, if already present, raises: I want to be sure to do not remove good/large data by mistake'''
+def create_data_folders(dir, exist_ok:bool=False) -> Tuple[Path, Path, Path, Path]:
+  r'''if not present, create, default behavior if already present, raises: I want to be sure to do not remove good/large data by mistake'''
   all_dir, train_dir, val_dir, test_dir = get_data_folders(dir)
-  for p in [all_dir, train_dir, val_dir, test_dir]: os.makedirs(p, exist_ok = True)
+  for p in [all_dir, train_dir, val_dir, test_dir]: os.makedirs(p, exist_ok=exist_ok)
   return all_dir, train_dir, val_dir, test_dir
 
 

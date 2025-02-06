@@ -107,6 +107,7 @@ def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_int
         set_dihedral_angle_(data.pos, j, k, old_angle, new_angle, data.adj_matrix)
 
     if np.min(pdist(data.pos, 'euclidean')) <= min_interatomic_dist_required:
+        assert og_pos.shape == data.pos.shape, f"shapes must be equal but got: og_pos={og_pos.shape} and data={data.pos.shape}"
         data.pos = og_pos # undo
 
 
@@ -127,4 +128,10 @@ def frad(data:AtomicData, add_coords_noise: bool = True):
         return data
 
     apply_coords_noise_(data)
+    return data
+
+def coord_noise(data:AtomicData):
+    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape)) * 0.005
+    data.pos += data.noise_target
     return data
