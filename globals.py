@@ -6,8 +6,8 @@ params = yaml_to_dict(yaml_params_path)
 
 max_confs = params['max_confs']
 n_confs_to_keep = params['n_confs_to_keep'] # num of confs to keep after generating max_confs
-min_rmsd = params['min_rmsd']
-e_window = params['e_window']
+min_rmsd = params['min_rmsd'] # if < 1.5 / 2.0 then same conf
+e_window = params['e_window'] # set this very large
 num_threads = params['num_threads'] # mp.cpu_count()
 
 # mapping status codes to human readable strings
