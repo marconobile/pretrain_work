@@ -291,7 +291,8 @@ def main(args=None, running_as_script: bool = True):
     dataset_test = ConcatDataset(_indexed_datasets)
 
     bs = args.batch_size
-    if args.out_descriptors: bs = 1
+    if args.out_descriptors:
+        bs = 1
     dataloader = DataLoader(dataset=dataset_test, shuffle=False,batch_size=bs)
 
     # run inference
@@ -310,8 +311,10 @@ def main(args=None, running_as_script: bool = True):
         del out, ref_data
 
     # ! CALLBACKS
-    if args.out_descriptors: cbs=[DescriptorWriter(multiplicity=config.get('latent_dim'), out_dir=args.out_descriptors)]
-    else: cbs = [AccuracyMetric("graph_output")]
+    if args.out_descriptors:
+        cbs=[DescriptorWriter(multiplicity=config.get('latent_dim'), out_dir=args.out_descriptors)]
+    else:
+        cbs = [AccuracyMetric("graph_output")]
 
     config.pop("device")
     infer(dataloader, model, device, per_node_outputs_keys, chunk_callbacks=[metrics_callback]+cbs, **config)

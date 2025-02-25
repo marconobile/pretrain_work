@@ -5,7 +5,12 @@ import errno
 
 
 def ls(dir):
-  return [join(dir, f) for f in os.listdir(dir) if isfile(join(dir, f))]
+    if not os.path.isdir(dir):
+        raise ValueError(f"dir provided ({dir}) is not a dir")
+        # Efficiently pre-filter entries using os.scandir
+    with os.scandir(dir) as entries:
+        # Filter non-hidden files using entry.is_file() and entry.name
+        return [os.path.join(dir, entry.name) for entry in entries if entry.is_file() and not entry.name.startswith('.')]
 
 
 def move_files_to_folder(dst_folder, files_to_move):

@@ -36,8 +36,8 @@ def worker(smiles_target, save_dir, lock, shared_i_save):
     pos = []
     conf = mol.GetConformer()
     for i, atom in enumerate(mol.GetAtoms()):
-      positions = conf.GetAtomPosition(i)
-      pos.append((positions.x, positions.y, positions.z))
+        positions = conf.GetAtomPosition(i)
+        pos.append((positions.x, positions.y, positions.z))
     pos = torch.tensor(pos, dtype=torch.float32)
     batched_pos.append(pos)
 

@@ -111,15 +111,14 @@ def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_int
         data.pos = og_pos # undo
 
 
-def apply_coords_noise_(data:AtomicData):
+def apply_coords_noise_(data:AtomicData, coords_noise_scale:float):
     '''sample and return coords noise
     std of noise is unformly sampled between min:float=0.004, max:float=0.3
     '''
-    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * np.random.uniform(0.004, 0.3)).to(torch.float32)
+    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * coords_noise_scale).to(torch.float32)
     data.pos += data.noise_target
 
-def frad(data:AtomicData, add_coords_noise: bool = True):
-
+def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.1):
     data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
     apply_dihedral_noise_(data)
 
@@ -127,11 +126,12 @@ def frad(data:AtomicData, add_coords_noise: bool = True):
         data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
         return data
 
-    apply_coords_noise_(data)
+    apply_coords_noise_(data, coords_noise_scale)
     return data
 
+# best for now 0.1
 def coord_noise(data:AtomicData):
     data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
-    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * 0.005).to(torch.float32)
+    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * 0.01).to(torch.float32)
     data.pos += data.noise_target
     return data

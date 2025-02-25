@@ -1,21 +1,26 @@
 """ Adapted from https://github.com/mir-group/nequip
 """
-
-import logging
-import inspect
 import torch.nn
+import torch.nn.functional as F
+from torch_scatter import scatter_mean # scatter
 
-# import torch.functional as F
 
-from typing import Dict
-from importlib import import_module
-from torch_scatter import scatter, scatter_mean
+def ensemble_predictions(predictions, targets, ensemble_indices):
+    ''' checks whether field has already been ensembled, if not, ensembles it using ensemble_indices'''
+    unique_ensembles = torch.unique(ensemble_indices)
 
-import torcheval
-from torcheval.metrics.functional import binary_precision
+    # ensemble predictions
+    is_input_already_ensembled = unique_ensembles.shape[0] == predictions.shape[0]
+    if not is_input_already_ensembled:
+        predictions = scatter_mean(predictions, ensemble_indices)
 
-from geqtrain.utils import instantiate_from_cls_name
-from geqtrain.data import AtomicDataDict
+    # ensemble targets
+    is_output_already_ensembled = unique_ensembles.shape[0] == targets.shape[0]
+    if not is_output_already_ensembled:
+        targets = scatter_mean(targets, ensemble_indices) # acts just as selection and ordering wrt unique_ensembles
+
+    return predictions, targets
+
 
 class FocalLossBinaryAccuracy:
     def __init__(
@@ -44,24 +49,23 @@ class FocalLossBinaryAccuracy:
         self,
         pred: dict,
         ref: dict,
-        key: str, # key to be used to select element in DataDict
+        key: str,
         mean: bool = True,
         **kwargs,
     ):
-        inputs = pred[key].squeeze()
-        targets = ref[key].squeeze()
-        p = inputs.sigmoid()
-        ce_loss = torch.nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+        logits = pred[key].squeeze()
+        targets_binary = ref[key].squeeze()
+        p = logits.sigmoid()
+        ce_loss = F.binary_cross_entropy_with_logits(logits, targets_binary, reduction="none")
 
-        p_t = p * targets + (1 - p) * (1 - targets)
+        p_t = p * targets_binary + (1 - p) * (1 - targets_binary)
         loss = ce_loss * ((1 - p_t) ** self.gamma)
 
         if self.alpha >= 0:
-            alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
+            alpha_t = self.alpha * targets_binary + (1 - self.alpha) * (1 - targets_binary)
             loss = alpha_t * loss
 
-        if mean: loss = loss.mean()
-        return loss
+        return loss.mean() if mean else loss
 
 
 class BinaryAccuracy:
@@ -71,6 +75,10 @@ class BinaryAccuracy:
         params: dict = {},
         **kwargs,
     ):
+        self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
         self.func_name = "BinaryAccuracy"
         self.treshold_for_positivity = .5
 
@@ -78,88 +86,54 @@ class BinaryAccuracy:
         self,
         pred: dict,
         ref: dict,
-        key: str, # key to be used to select element in DataDict
+        key: str,
         mean: bool = True,
         **kwargs,
     ):
         if mean:
             raise(f"{__class__.__name__} cannot be used as loss function for training")
 
-        targets = ref[key]
-        predictions = (pred[key].sigmoid()<self.treshold_for_positivity).float().reshape(*targets.shape)
-        return torch.abs(targets - predictions)
+        logits = pred[key].squeeze()
+        targets_binary = ref[key].squeeze()
 
-        # accuracy = torcheval.metrics.functional.binary_accuracy(predictions.squeeze(), targets.squeeze())
-        # return torch.full(targets.shape, accuracy, device=targets.device)
+        if 'ensemble_index' in pred:
+            assert 'ensemble_index' in ref
+            logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
 
-class Precision:
+        binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
+        return torch.abs(targets_binary - binarized_predictions)
+
+
+class EnsembleBCEWithLogitsLoss:
     def __init__(
         self,
         func_name: str,
         params: dict = {},
+        **kwargs,
     ):
+        self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        self.func_name = "EnsembleBCEWithLogitsLoss"
         self.treshold_for_positivity = .5
 
     def __call__(
         self,
         pred: dict,
         ref: dict,
-        key: str, # key to be used to select element in DataDict
+        key: str,
         mean: bool = True,
+        **kwargs,
     ):
-        if mean:
-            raise(f"{__class__.__name__} cannot be used as loss function for training")
+        logits = pred[key].squeeze()
+        targets_binary = ref[key].squeeze()
 
-        targets = ref[key]
-        predictions = (pred[key].sigmoid()>self.treshold_for_positivity).float()
-        # precision = torcheval.metrics.functional.binary_precision(predictions.squeeze(), targets.squeeze())
-        # return torch.full(targets.shape, precision, device=targets.device)
-        accuracy = torcheval.metrics.functional.binary_accuracy(predictions.squeeze(), targets.squeeze())
-        return torch.full(targets.shape, accuracy, device=targets.device)
+        if 'ensemble_index' in pred:
+            assert 'ensemble_index' in ref
+            logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
 
-class Recall:
-    def __init__(
-        self,
-        func_name: str,
-        params: dict = {},
-    ):
-        self.treshold_for_positivity = .5
-
-    def __call__(
-        self,
-        pred: dict,
-        ref: dict,
-        key: str, # key to be used to select element in DataDict
-        mean: bool = True,
-    ):
-        if mean:
-            raise(f"{__class__.__name__} cannot be used as loss function for training")
-
-        targets = ref[key].bool()
-        predictions = (pred[key].sigmoid()>self.treshold_for_positivity).bool()
-        recall = torcheval.metrics.functional.binary_recall(predictions.squeeze(), targets.squeeze())
-        return torch.full(targets.shape, recall, device=targets.device)
-
-class F1:
-    def __init__(
-        self,
-        func_name: str,
-        params: dict = {},
-    ):
-        self.treshold_for_positivity = .5
-
-    def __call__(
-        self,
-        pred: dict,
-        ref: dict,
-        key: str, # key to be used to select element in DataDict
-        mean: bool = True,
-    ):
-        if mean:
-            raise(f"{__class__.__name__} cannot be used as loss function for training")
-
-        targets = ref[key]
-        predictions = (pred[key].sigmoid()>self.treshold_for_positivity).float()
-        f1 = torcheval.metrics.functional.binary_f1_score(predictions.squeeze(), targets.squeeze())
-        return torch.full(targets.shape, f1, device=targets.device)
-
+        return F.binary_cross_entropy_with_logits(
+            logits,
+            targets_binary,
+            reduction="mean" if mean else "none"
+        )

@@ -1,6 +1,7 @@
-from ._loss import BinaryAccuracy, FocalLossBinaryAccuracy
+from ._loss import BinaryAccuracy, FocalLossBinaryAccuracy, EnsembleBCEWithLogitsLoss
 
 __all__ = [
     BinaryAccuracy,
     FocalLossBinaryAccuracy,
+    EnsembleBCEWithLogitsLoss,
 ]

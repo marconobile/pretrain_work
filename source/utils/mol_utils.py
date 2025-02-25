@@ -2,11 +2,36 @@
 import numpy as np
 from rdkit import Chem as rdChem
 from rdkit.Geometry import Point3D
-from rdkit.Chem import AllChem, rdMolTransforms
+from rdkit.Chem import AllChem, rdMolTransforms, rdMolAlign, GetPeriodicTable
 import torch
 from copy import deepcopy
 import warnings
 
+
+
+def atomic_number_to_symbol(atomic_number: int) -> str:
+    """Convert atomic number to atomic symbol using RDKit."""
+    return GetPeriodicTable().GetElementSymbol(atomic_number)
+
+
+def compute_rmsd(mol1: rdChem.Mol, mol2: rdChem.Mol) -> float:
+    """
+    Compute the Root Mean Square Deviation (RMSD) between two RDKit molecules.
+
+    Parameters:
+    - mol1: First RDKit molecule (should have conformers).
+    - mol2: Second RDKit molecule (should have conformers).
+
+    Returns:
+    - float: RMSD value between the aligned molecules.
+    """
+    # Ensure conformers are present
+    if not mol1.GetNumConformers() or not mol2.GetNumConformers():
+        raise ValueError("Both molecules must have conformers for RMSD calculation.")
+
+    # Align molecules and compute RMSD
+    rmsd = rdMolAlign.AlignMol(mol1, mol2)
+    return rmsd
 
 
 def optimize_conformers(molecule):

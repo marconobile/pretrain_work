@@ -115,26 +115,45 @@ def split_npz_wrt_label(filepaths):
     return positive_examples, negative_examples
 
 
-# # TODO: fix this if needed
-# def split_train_val_with_balanced_labels(data_dir, perc=(.8, .1, .1)):
-#   all_path,train_path,val_path,test_path = create_data_folders(data_dir)
-#   npzs_path = ls(all_path)
-#   shuffle(npzs_path)
-#   positive_examples, negative_examples = split_npz_wrt_label(npzs_path)
-#   shuffle(positive_examples)
-#   shuffle(negative_examples)
-#   # split positive negs in the perc
-#   train_positive_examples, val_positive_examples, test_positive_examples = split_list(positive_examples, perc[0], perc[1], perc[2])
-#   train_negative_examples, val_negative_examples, test_negative_examples = split_list(negative_examples, perc[0], perc[1], perc[2])
-#   test_split_list()
-#   assert len(val_positive_examples) + len(train_positive_examples) + len(test_positive_examples) == len(positive_examples)
-#   assert len(val_negative_examples) +  len(train_negative_examples) + len(test_negative_examples) == len(negative_examples)
-#   train_data = train_positive_examples+train_negative_examples
-#   val_data = val_positive_examples+val_negative_examples
-#   test_data = test_positive_examples+test_negative_examples
-#   shuffle(train_data)
-#   shuffle(val_data)
-#   shuffle(test_data)
-#   move_files_to_folder(train_path, train_data)
-#   move_files_to_folder(val_path, val_data)
-#   if len(test_positive_examples) + len(test_negative_examples) != 0: move_files_to_folder(test_path, test_data)
+
+def split_train_val_with_balanced_labels(data_dir, perc=(.8, .1, .1)):
+    all_path,train_path,val_path,test_path = create_data_folders(data_dir)
+    npzs_path = ls(all_path)
+    shuffle(npzs_path)
+    positive_examples, negative_examples = split_npz_wrt_label(npzs_path)
+    shuffle(positive_examples)
+    shuffle(negative_examples)
+    # split positive negs in the perc
+    train_positive_examples, val_positive_examples, test_positive_examples = split_list(positive_examples, perc[0], perc[1], perc[2])
+    train_negative_examples, val_negative_examples, test_negative_examples = split_list(negative_examples, perc[0], perc[1], perc[2])
+    test_split_list()
+    assert len(val_positive_examples) + len(train_positive_examples) + len(test_positive_examples) == len(positive_examples)
+    assert len(val_negative_examples) +  len(train_negative_examples) + len(test_negative_examples) == len(negative_examples)
+    train_data = train_positive_examples+train_negative_examples
+    val_data = val_positive_examples+val_negative_examples
+    test_data = test_positive_examples+test_negative_examples
+    shuffle(train_data)
+    shuffle(val_data)
+    shuffle(test_data)
+    move_files_to_folder(train_path, train_data)
+    move_files_to_folder(val_path, val_data)
+    if len(test_positive_examples) + len(test_negative_examples) != 0: move_files_to_folder(test_path, test_data)
+
+
+def get_class_weights(y, task_idx=None):
+    '''
+    GO BACK AND LOOK AT HOW IT IS USED IN SET TRANSFORMER
+    '''
+
+    if task_idx is None:
+        _, counts = np.unique(y, return_counts=True)
+        weights = [1 - c / y.shape[0] for c in counts]
+
+        return np.array(weights), np.array(counts)
+    else:
+        y_t = y.T
+
+        _, counts = np.unique(y_t[task_idx], return_counts=True)
+        weights = [1 - c / y_t[task_idx].shape[0] for c in counts]
+
+        return np.array(weights), np.array(counts)

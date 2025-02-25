@@ -13,23 +13,26 @@ except ImportError:
   warnings.warn("Warning: using torch_geometric lib instead of geqtrain.utils.torch_geometric")
 
 
-def pyg2mol(pyg): return set_coords(rdChem.AddHs(rdChem.MolFromSmiles(pyg.smiles, smi_reader_params())), pyg.pos)
+def pyg2mol(pyg):
+    return set_coords(rdChem.AddHs(rdChem.MolFromSmiles(pyg.smiles, smi_reader_params())), pyg.pos)
 
 
 def mols2pyg_list(mols, smiles, **mol2pyg_kwargs):
-  pyg_mols = []
-  for m, s in zip(mols, smiles):
-    pyg_m = mol2pyg(m, s, **mol2pyg_kwargs)
-    if pyg_m == None: raise ValueError('Error in casting mol to pyg') # continue
-    pyg_mols.append(pyg_m)
-  return pyg_mols
+    pyg_mols = []
+    for m, s in zip(mols, smiles):
+        pyg_m = mol2pyg(m, s, **mol2pyg_kwargs)
+        if pyg_m == None:
+            raise ValueError('Error in casting mol to pyg') # continue
+        pyg_mols.append(pyg_m)
+    return pyg_mols
 
 
 def mols2pyg_list_with_targets(mols, smiles, ys, **mol2pyg_kwargs):
     pyg_mols = []
     for m, s, y in zip(mols, smiles, ys):
         pyg_m = mol2pyg(m, s, **mol2pyg_kwargs)
-        if pyg_m == None: raise ValueError('Error in casting mol to pyg') # continue
+        if pyg_m == None:
+           raise ValueError('Error in casting mol to pyg') # continue
         pyg_m.y = np.array(y, dtype=np.float32)
         pyg_mols.append(pyg_m)
     return pyg_mols
@@ -75,7 +78,7 @@ def mol2pyg(mol, smi, max_energy:float=0.0):
         _hybridization.append(hybridization_value)
 
     rotable_bonds = get_torsions([mol])
-    # TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
+    #! TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
     return Data(
         adj_matrix=torch.tensor(adj_matrix, dtype=torch.long),
         atom_types=torch.tensor(type_idx, dtype=torch.long),

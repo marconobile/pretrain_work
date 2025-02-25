@@ -6,8 +6,10 @@ import numpy as np
 from types import SimpleNamespace
 from .data_splitting_utils import create_data_folders
 from pathlib import Path
+from numpy.lib.npyio import NpzFile
 
-def get_field_from_npzs(path:str, field:Union[str, List]='*'):
+
+def get_field_from_npzs(path:str, field:Union[str, List]='*') -> List[NpzFile]:
   '''
   example usage:
   l = get_field_from_npzs(p)
@@ -15,11 +17,15 @@ def get_field_from_npzs(path:str, field:Union[str, List]='*'):
   '''
   is_single_npz = lambda path: os.path.splitext(path)[1].lower() == ".npz"
   npz_files = [path] if is_single_npz(path) else ls(path)
-  if field == '*': return [np.load(npz) for npz in npz_files]
+  if field == '*':
+    return [np.load(npz) for npz in npz_files]
   possible_keys = (k for k in np.load(npz_files[0]).keys())
-  if field not in possible_keys: raise ValueError(f'{field} not in {list(possible_keys)}')
-  if isinstance(field, str): return [np.load(el)[field].item() for el in npz_files]
-  if not isinstance(field, List): raise ValueError(f'Unaccepted type for field, which is {type(field)}, but should be List or str ')
+  if field not in possible_keys:
+    raise ValueError(f'{field} not in {list(possible_keys)}')
+  if isinstance(field, str):
+    return [np.load(el)[field].item() for el in npz_files]
+  if not isinstance(field, List):
+    raise ValueError(f'Unaccepted type for field, which is {type(field)}, but should be List or str ')
 
   out = []
   for npz in ls(path):
