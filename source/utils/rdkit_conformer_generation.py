@@ -1,77 +1,77 @@
-from rdkit import Chem as rdChem
-from rdkit.Chem import AllChem
-from rdkit.Chem import rdMolAlign
-from rdkit.Chem import rdMolDescriptors
-from rdkit.Chem import SDWriter
-from source.utils.mol_utils import get_rdkit_conformer, preprocess_mol
-import warnings
+# from rdkit import Chem as rdChem
+# from rdkit.Chem import AllChem
+# from rdkit.Chem import rdMolAlign
+# from rdkit.Chem import rdMolDescriptors
+# from rdkit.Chem import SDWriter
+# from source.utils.mol_utils import get_rdkit_conformer, preprocess_mol
+# import warnings
 
-from globals import *
+# # from old_npz_writes.globals import *
 
-def rdkit_generate_conformers(mol):
-    """
-    Generate and optimize conformers for a molecule.
+# def rdkit_generate_conformers(mol):
+#     """
+#     Generate and optimize conformers for a molecule.
 
-    Parameters:
-    - mol: rdkit mol
-    - num_conformers: Number of conformers to generate
-    - prune_rms_thresh: RMS threshold for pruning conformers: If the RMSD between the new conformer and any existing conformer is less than the pruneRmsThresh value,
-        the new conformer is discarded as it is considered redundant.
-    - energy_threshold: Energy threshold for filtering conformers: if energy of mol is greater then energy_threshold + min energy of ensemble then discard mol
+#     Parameters:
+#     - mol: rdkit mol
+#     - num_conformers: Number of conformers to generate
+#     - prune_rms_thresh: RMS threshold for pruning conformers: If the RMSD between the new conformer and any existing conformer is less than the pruneRmsThresh value,
+#         the new conformer is discarded as it is considered redundant.
+#     - energy_threshold: Energy threshold for filtering conformers: if energy of mol is greater then energy_threshold + min energy of ensemble then discard mol
 
-    Returns:
-    - List of conformers (RDKit molecule objects)
-    """
-    mol = preprocess_mol(mol)
+#     Returns:
+#     - List of conformers (RDKit molecule objects)
+#     """
+#     mol = preprocess_mol(mol)
 
-    # # Get conformer
-    # conf = get_rdkit_conformer(mol) # do I need this?
-    # if not conf:
-    #   warnings.warn(f"rdkit fallback failed aswell, dropping molecule")
-    #   return None, None
+#     # # Get conformer
+#     # conf = get_rdkit_conformer(mol) # do I need this?
+#     # if not conf:
+#     #   warnings.warn(f"rdkit fallback failed aswell, dropping molecule")
+#     #   return None, None
 
-    # Generate initial conformers
-    params = AllChem.ETKDGv3()
-    params.pruneRmsThresh = min_rmsd
-    AllChem.EmbedMultipleConfs(mol, clearConfs=True, numConfs=max_confs, params=params)
+#     # Generate initial conformers
+#     params = AllChem.ETKDGv3()
+#     params.pruneRmsThresh = min_rmsd
+#     AllChem.EmbedMultipleConfs(mol, clearConfs=True, numConfs=max_confs, params=params)
 
-    # Optimize conformers and calculate energies
-    conformer_energies = []
-    for conf_id in range(mol.GetNumConformers()): # TODO replace with MMFFOptimizeMoleculeConfs
-        # Optimize the conformation
-        AllChem.MMFFOptimizeMolecule(mol, confId=conf_id)
+#     # Optimize conformers and calculate energies
+#     conformer_energies = []
+#     for conf_id in range(mol.GetNumConformers()): # TODO replace with MMFFOptimizeMoleculeConfs
+#         # Optimize the conformation
+#         AllChem.MMFFOptimizeMolecule(mol, confId=conf_id)
 
-        # Calculate the energy
-        energy = AllChem.MMFFGetMoleculeForceField(mol, confId=conf_id).CalcEnergy()
-        conformer_energies.append((conf_id, energy))
+#         # Calculate the energy
+#         energy = AllChem.MMFFGetMoleculeForceField(mol, confId=conf_id).CalcEnergy()
+#         conformer_energies.append((conf_id, energy))
 
-    if not conformer_energies: return None, None
+#     if not conformer_energies: return None, None
 
-    # Filter out high-energy conformers
-    min_energy = min(energy for _, energy in conformer_energies)
-    filtered_conformers = [conf_id for conf_id, energy in conformer_energies if energy - min_energy < e_window]
-    return mol, filtered_conformers
+#     # Filter out high-energy conformers
+#     min_energy = min(energy for _, energy in conformer_energies)
+#     filtered_conformers = [conf_id for conf_id, energy in conformer_energies if energy - min_energy < e_window]
+#     return mol, filtered_conformers
 
-def rdkit_save_conformers_to_sdf(mol, filename, filtered_conformers:list=[]):
-    """
-    Save conformers to an SDF file.
+# def rdkit_save_conformers_to_sdf(mol, filename, filtered_conformers:list=[]):
+#     """
+#     Save conformers to an SDF file.
 
-    Parameters:
-    - mol: RDKit molecule object
-    - conformer_ids: List of conformer IDs to save
-    - filename: Output SDF file name
-    """
-    writer = SDWriter(filename)
-    if filtered_conformers:
-      for id in filtered_conformers:
-        writer.write(mol, confId=id)
-    else: writer.write(mol)
-    writer.close()
+#     Parameters:
+#     - mol: RDKit molecule object
+#     - conformer_ids: List of conformer IDs to save
+#     - filename: Output SDF file name
+#     """
+#     writer = SDWriter(filename)
+#     if filtered_conformers:
+#       for id in filtered_conformers:
+#         writer.write(mol, confId=id)
+#     else: writer.write(mol)
+#     writer.close()
 
 
-# conformer_energies, converged = optimize_conformers(mol)
-#   if not conformer_energies: return None, None
+# # conformer_energies, converged = optimize_conformers(mol)
+# #   if not conformer_energies: return None, None
 
-#   # Filter out high-energy conformers
-#   min_energy = min(conformer_energies)
-#   filtered_conformers = [i for i, energy in enumerate(conformer_energies) if energy - min_energy < energy_threshold]
+# #   # Filter out high-energy conformers
+# #   min_energy = min(conformer_energies)
+# #   filtered_conformers = [i for i, energy in enumerate(conformer_energies) if energy - min_energy < energy_threshold]

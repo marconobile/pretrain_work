@@ -2,22 +2,24 @@ import torch
 import numpy as np
 import warnings
 from rdkit import Chem as rdChem
-from rdkit.Chem.rdchem import HybridizationType
-from source.utils.atom_encoding import periodic_table_group, periodic_table_period
-from source.utils.mol_utils import smi_reader_params, smi_writer_params, set_coords, preprocess_mol
+from source.utils.mol_utils import smi_reader_params, set_coords, get_rdkit_conformer
 from source.data_transforms.utils import get_torsions, GetDihedral
+
 try:
-  from geqtrain.utils.torch_geometric import Data
+    from geqtrain.utils.torch_geometric import Data
 except ImportError:
-  from torch_geometric.data import Data
-  warnings.warn("Warning: using torch_geometric lib instead of geqtrain.utils.torch_geometric")
+    from torch_geometric.data import Data
+    warnings.warn("Warning: using torch_geometric lib instead of geqtrain.utils.torch_geometric")
+
+from source.utils.data_utils.featurizer import atom_to_feature_vector, possible_atomic_properties, possible_bond_properties, bond_to_feature_vector, allowable_features
+from collections import defaultdict
 
 
 def pyg2mol(pyg):
     return set_coords(rdChem.AddHs(rdChem.MolFromSmiles(pyg.smiles, smi_reader_params())), pyg.pos)
 
 
-def mols2pyg_list(mols, smiles, **mol2pyg_kwargs):
+def mols2pyg_list(mols:list, smiles:list, **mol2pyg_kwargs)-> list:
     pyg_mols = []
     for m, s in zip(mols, smiles):
         pyg_m = mol2pyg(m, s, **mol2pyg_kwargs)
@@ -38,60 +40,86 @@ def mols2pyg_list_with_targets(mols, smiles, ys, **mol2pyg_kwargs):
     return pyg_mols
 
 
-def mol2pyg(mol, smi, max_energy:float=0.0):
+def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False) -> Data:
     '''
     IMPO: do not trust smiles: given smi -> get MOL -> addHs -> do work. Then for any other place where you need to act on MOL, restart from input smi and repeat smi -> get MOL -> addHs -> do work
     IMPO: this does not set y
-
-    returns: pyg data obj or None if some operations are not possible
+    returns:
+        pyg data obj or None if some operations are not possible
     '''
-    conf = mol.GetConformer() # TODO: ok iff sensible conformer has been already generated and setted
-    type_idx, aromatic, is_in_ring, _hybridization, chirality = [], [], [], [], []
-    pos,group, period = [], [], []
-    num_atoms = mol.GetNumAtoms()
-    adj_matrix = np.zeros((num_atoms, num_atoms), dtype=int)
-    for i, atom in enumerate(mol.GetAtoms()):
-        assert atom.GetIdx() == i
+    if mol is None:
+        raise ValueError("Molecule is none")
 
-        for neighbor in atom.GetNeighbors():
+    mol = rdChem.RemoveHs(mol)
+    # assert all(atom.GetAtomicNum() != 1 for atom in mol.GetAtoms()), "Molecule contains hydrogen atoms"
+
+    if not use_rdkit_3d and mol.GetNumConformers() == 0:
+        raise ValueError("Molecule has no conformers")
+
+    conf = get_rdkit_conformer(mol)
+    if conf is None:
+        print("Could not get rdkit Conformer obj for molecule")
+        return None
+
+    num_atoms = mol.GetNumAtoms() # TODO care when dropping hs
+    rotable_bonds = get_torsions(mol) # TODO care when dropping hs
+    dihedral_angles_degrees = [GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds] # TODO care when dropping hs
+
+    adj_matrix = np.zeros((num_atoms, num_atoms), dtype=np.uint8) # TODO care when dropping hs
+    atoms_features = defaultdict(list) # value[idx] -> feat for atom at idx
+    pos = []
+
+    rows, cols = [], []
+    bonds_features = defaultdict(list)
+    covalent_bonds = [[bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()] for bond in mol.GetBonds()]
+
+    for i, atom in enumerate(mol.GetAtoms()):
+        assert atom.GetIdx() == i # TODO care when dropping hs
+
+        # fill adj matrix
+        for neighbor in atom.GetNeighbors(): # TODO care when dropping hs
             neighbor_idx = neighbor.GetIdx()
             adj_matrix[i, neighbor_idx] = 1
             adj_matrix[neighbor_idx, i] = 1
 
-        type_idx.append(atom.GetAtomicNum())
-        group.append(periodic_table_group(atom))
-        period.append(periodic_table_period(atom))
-
+        # coords, done as below to get 3d out of conf
         positions = conf.GetAtomPosition(i)
         pos.append((positions.x, positions.y, positions.z))
 
-        aromatic.append(1 if atom.GetIsAromatic() else 0)
-        is_in_ring.append(1 if atom.IsInRing() else 0)
-        # https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html#rdkit.Chem.rdchem.ChiralType
-        chirality.append(atom.GetChiralTag())
+        atom_feature = atom_to_feature_vector(atom)
+        for atomic_property in possible_atomic_properties:
+            atoms_features[atomic_property].append(atom_feature.get(atomic_property))
 
-        hybridization = atom.GetHybridization()
-        hybridization_value = 0
-        if hybridization == HybridizationType.SP: hybridization_value = 1
-        elif hybridization == HybridizationType.SP2: hybridization_value = 2
-        elif hybridization == HybridizationType.SP3: hybridization_value = 3
-        _hybridization.append(hybridization_value)
+        # build fully connected edge_index
+        for j in range(i + 1, num_atoms):
+            # if [i, j] not in edge_index and [j, i] not in edge_index:
+            rows += [i, j]
+            cols += [j, i]
+            is_a_covalent_bond = [i, j] in covalent_bonds or [j, i] in covalent_bonds
+            bond = mol.GetBondBetweenAtoms(i, j) if is_a_covalent_bond else None # GetBondBetweenAtoms returns same bond of ij and ji
+            bonds_feature = bond_to_feature_vector(bond)
+            for bond_property in possible_bond_properties:
+                bonds_features[bond_property] += 2 * [bonds_feature.get(bond_property)] # can handle absent bond
 
-    rotable_bonds = get_torsions([mol])
-    #! TODO pass args as dict, where the dict is built as: k:v if v!=None, is there a better refactoring? Builder pattern?
+    # do permutation to sort wrt source idx as, eg:
+    # from:tensor([[0, 0, 0, 0, 1, 2, 3, 4],
+    #              [1, 2, 3, 4, 0, 0, 0, 0]])
+    # to:  tensor([[0, 0, 0, 0, 1, 2, 3, 4],
+    #              [1, 2, 3, 4, 0, 0, 0, 0]])
+    edge_index = torch.tensor([rows, cols], dtype=torch.long) # [2, E] each bidirectiona edge
+    perm = (edge_index[0] * num_atoms + edge_index[1]).argsort()
+    edge_index = edge_index[:, perm]
+    bonds_features = {k:torch.tensor(v, dtype=torch.short)[perm] for k,v in bonds_features.items()} # k:tensor of shape (E)
+
+    assert edge_index.shape[-1] ==  num_atoms*(num_atoms-1)
+
     return Data(
-        adj_matrix=torch.tensor(adj_matrix, dtype=torch.long),
-        atom_types=torch.tensor(type_idx, dtype=torch.long),
-        group=torch.tensor(group, dtype=torch.long),
-        period=torch.tensor(period, dtype=torch.long),
+        adj_matrix=torch.tensor(adj_matrix, dtype=torch.short),
         pos=torch.tensor(pos, dtype=torch.float32),
-        smiles=smi, #todo handle case where not smi Chem.MolToSmiles(mol, smi_writer_params())
-        hybridization=torch.tensor(_hybridization, dtype=torch.long),
-        is_aromatic=torch.tensor(aromatic, dtype=torch.long),
-        is_in_ring=torch.tensor(is_in_ring, dtype=torch.long),
-        chirality=torch.tensor(chirality, dtype=torch.long),
-        rotable_bonds=torch.tensor(rotable_bonds, dtype=torch.long),
-        dihedral_angles_degrees=torch.tensor(
-            [GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds], dtype=torch.float32),
-        max_energy=torch.tensor(max_energy, dtype=torch.float32), # max energy across all sampled conformers of input mol
+        rotable_bonds=torch.tensor(rotable_bonds, dtype=torch.short),
+        dihedral_angles_degrees=torch.tensor(dihedral_angles_degrees, dtype=torch.float32),
+        **{k: torch.tensor(v, dtype=torch.short) for k, v in atoms_features.items()},
+        edge_index=edge_index,
+        **bonds_features,
+        smiles=rdChem.MolToSmiles(mol, canonical=True)
     )

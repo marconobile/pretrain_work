@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from .data_splitting_utils import create_data_folders
 from pathlib import Path
 from numpy.lib.npyio import NpzFile
+import torch
+from source.utils.data_utils.featurizer import possible_bond_properties
 
 
 def get_field_from_npzs(path:str, field:Union[str, List]='*') -> List[NpzFile]:
@@ -38,7 +40,7 @@ def get_field_from_npzs(path:str, field:Union[str, List]='*') -> List[NpzFile]:
   return out
 
 
-def save_npz(pyg_mols, folder_name:str=None, N:int=None, idx:int=0):
+def save_npz(pyg_mols, split:bool=True, folder_name:str=None, N:int=None, idx:int=0):
     '''
     pyg_mols: list of pytorch geometric data objects
     f: func to apply to each g['y'], more below
@@ -79,37 +81,38 @@ def save_npz(pyg_mols, folder_name:str=None, N:int=None, idx:int=0):
     (5,)
     '''
 
-    all_dir, _, _, _ = create_data_folders(folder_name)
+    def _save_pyg_as_npz(g, filepath:str|Path) -> None:
+        '''g is a pyg Data object generally: if fixed field (N,), else (1, N)'''
+
+        g['coords'] = g['pos'] if g['pos'].dim() == 3 else g['pos'].unsqueeze(0)  # (1, N, 3)
+        g['graph_labels'] = g['y']
+
+        # Filter out the None values
+        filtered_data = {}
+        for k, v in g:
+            if v is not None:
+                if isinstance(v, torch.Tensor):
+                   v = v.numpy()
+                filtered_data[k] = v
+
+        np.savez(file=filepath, **filtered_data)
+        test_npz_validity(filepath+".npz")
+
+    if split:
+        all_dir, _, _, _ = create_data_folders(folder_name)
+    else:
+        all_dir = folder_name
+        os.makedirs(folder_name)
+
     print('Saving npzs in: ', all_dir)
     if N:
         pyg_mols = pyg_mols[:N]
 
     for pyg_m in pyg_mols:
-        save_pyg_as_npz(pyg_m, f'{all_dir}/mol_{idx}')
+        _save_pyg_as_npz(pyg_m, f'{all_dir}/mol_{idx}')
         idx +=1
 
     return idx
-
-
-def save_pyg_as_npz(g, filepath:str|Path):
-
-    # if fixed field it must be (N,), else (1, N)
-    g['coords'] = g['pos'] if g['pos'].dim() == 3 else g['pos'].unsqueeze(0)  # (1, N, 3)
-    g['graph_labels'] = g['y']
-
-    # edge_index = g['edge_index'].unsqueeze(0) # (1, 2, E)
-    # edge_attr = g['edge_attr'].unsqueeze(0) # (1, E, Edg_attr_dims)
-
-    # Filter out the None values and downcast
-    filtered_data = {}
-    for k, v in g:
-        if v is not None:
-            try: v = v.numpy()
-            except: pass
-            filtered_data[k] = v
-
-    np.savez(file=filepath, **filtered_data)
-    test_npz_validity(filepath+".npz")
 
 
 def get_smiles_and_filepaths_from_valid_npz(npz_dir:str|Path) -> Tuple[str, Path]:

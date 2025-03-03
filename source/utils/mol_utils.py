@@ -44,6 +44,7 @@ def optimize_conformers(molecule):
 
     return energies, converged
 
+
 def get_rdkit_conformer(mol, max_attempts:int=10):
     '''
     if returns none: mols not embeddable
@@ -138,7 +139,7 @@ def minimize_energy(mol):
   return mol, energy
 
 
-def drop_disconnected_components(inpt):
+def drop_disconnected_components(inpt:rdChem.Mol|str) -> rdChem.Mol|str:
     '''assumption: largest fragment is always the mol desired'''
     if isinstance(inpt, rdChem.Mol):
         return max(rdChem.GetMolFrags(inpt, asMols=True), key=lambda frag: frag.GetNumAtoms())
@@ -152,16 +153,21 @@ def preprocess_mol(m:rdChem.Mol,
                   addHs:bool=True,
                   _drop_disconnected_components:bool=True
                 ):
-  if m == None: return None
-  try:
-    if addHs: m = rdChem.AddHs(m, addCoords=True)
-    #! dropping is a choice, we could also merge fragments as shown in: https://youtu.be/uvhZBpdDjoM?si=8Ica5_KfwUHmyUIX&t=1455
-    if _drop_disconnected_components: m = drop_disconnected_components(m)
-    if sanitize:
-      error = rdChem.SanitizeMol(m)
-      if error: return None
-  except: return None
-  return m
+    if m == None:
+        return None
+    try:
+        if addHs:
+            m = rdChem.AddHs(m, addCoords=True)
+        #! dropping is a choice, we could also merge fragments as shown in: https://youtu.be/uvhZBpdDjoM?si=8Ica5_KfwUHmyUIX&t=1455
+        if _drop_disconnected_components:
+            m = drop_disconnected_components(m)
+        if sanitize:
+            error = rdChem.SanitizeMol(m)
+            if error:
+                return None
+    except:
+        return None
+    return m
 
 
 def visualize_3d_mols(mols,
