@@ -130,8 +130,8 @@ def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:floa
     return data
 
 # best for now 0.1
-def coord_noise(data:AtomicData):
+def coord_noise(data:AtomicData, noise_scale:float=0.04):
     data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
-    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * 0.01).to(torch.float32)
+    data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * noise_scale).to(torch.float32)
     data.pos += data.noise_target
     return data
