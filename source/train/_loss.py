@@ -9,7 +9,7 @@ def ensemble_predictions_and_targets(predictions, targets, ensemble_indices):
     ''' checks whether field has already been ensembled, if not, ensembles it using ensemble_indices'''
     unique_ensembles = torch.unique(ensemble_indices)
 
-    # if unique_ensembles.dim() != predictions.dim():
+    # if unique_ensembles.dim() != predictions.dim(): #TODO: this was written since it could be that it breaks if BS=1; to be checked
     #     predictions = predictions.unsqueeze(0)
     #     targets = targets.unsqueeze(0)
 
