@@ -91,7 +91,7 @@ def set_dihedral_angle_(coords, j, k, current_angle_deg, desired_angle_deg, adja
     rotate_around_bond(coords, j, k, angle_diff_rad, downstream_atoms)
 
 # https://openkim.org/files/MO_959249795837_003/LennardJones612_UniversalShifted.params : 2**(1/6) * 0.5523570 = 0.62
-def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_interatomic_dist_required: float = 0.62):
+def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_interatomic_dist_required: float = 0.8):
     '''
     dihedral_scale: std of norm dist from which to sample the noise to add at torsional angles
     '''
@@ -102,13 +102,13 @@ def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_int
     noise = np.random.normal(0, dihedral_scale, size=original_dihedral_angles_degrees.shape)
     desired_dihedral_angles_degrees = original_dihedral_angles_degrees + noise
 
-    og_pos = data.pos.clone()
+    # og_pos = data.pos.clone() #! if scale <= 20.0 should not be
     for (_, j, k, _), old_angle, new_angle in zip(data.rotable_bonds, original_dihedral_angles_degrees, desired_dihedral_angles_degrees):
         set_dihedral_angle_(data.pos, j, k, old_angle, new_angle, data.adj_matrix)
 
-    if np.min(pdist(data.pos, 'euclidean')) <= min_interatomic_dist_required:
-        assert og_pos.shape == data.pos.shape, f"shapes must be equal but got: og_pos={og_pos.shape} and data={data.pos.shape}"
-        data.pos = og_pos # undo
+    # if np.min(pdist(data.pos, 'euclidean')) <= min_interatomic_dist_required:
+    #     assert og_pos.shape == data.pos.shape, f"shapes must be equal but got: og_pos={og_pos.shape} and data={data.pos.shape}"
+    #     data.pos = og_pos # undo
 
 
 def apply_coords_noise_(data:AtomicData, coords_noise_scale:float):
@@ -118,7 +118,8 @@ def apply_coords_noise_(data:AtomicData, coords_noise_scale:float):
     data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * coords_noise_scale).to(torch.float32)
     data.pos += data.noise_target
 
-def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.1):
+
+def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.04):
     data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
     apply_dihedral_noise_(data)
 
@@ -129,9 +130,27 @@ def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:floa
     apply_coords_noise_(data, coords_noise_scale)
     return data
 
-# best for now 0.1
+
 def coord_noise(data:AtomicData, noise_scale:float=0.04):
     data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
     data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * noise_scale).to(torch.float32)
+    data.pos += data.noise_target
+    return data
+
+
+# Define a function to calculate noise scale based on atomic number
+def noise_scale_fn(base_noise_scale, atomic_number):
+    # return base_noise_scale / (atomic_number + 1)  # Adding 1 to avoid division by zero
+    return 0.4 / (atomic_number + 1.e-4)
+
+def atomic_weighted_coord_noise(data: AtomicData, base_noise_scale: float = 0.04):
+    data = deepcopy(data)  # Create a deep copy of the data to avoid in-place modifications
+
+    # Calculate noise for each atom based on its atomic number
+    noise_scales = np.array([noise_scale_fn(base_noise_scale, atomic_number) for atomic_number in data['node_types']])
+
+    # Generate noise for each atom
+    noise = np.random.normal(0, 1, size=data.pos.shape) * noise_scales[:, None]
+    data.noise_target = torch.from_numpy(noise).to(torch.float32)
     data.pos += data.noise_target
     return data
