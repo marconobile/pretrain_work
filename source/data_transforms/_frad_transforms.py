@@ -150,7 +150,9 @@ def atomic_weighted_coord_noise(data: AtomicData, base_noise_scale: float = 0.04
     noise_scales = np.array([noise_scale_fn(base_noise_scale, atomic_number) for atomic_number in data['node_types']])
 
     # Generate noise for each atom
-    noise = np.random.normal(0, 1, size=data.pos.shape) * noise_scales[:, None]
+    # noise = np.random.normal(0, 1, size=data.pos.shape) * noise_scales[:, None]
+    noise = np.array([np.random.normal(0, scale, size=3) for scale in noise_scales])
+
     data.noise_target = torch.from_numpy(noise).to(torch.float32)
     data.pos += data.noise_target
     return data
