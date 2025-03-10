@@ -5,9 +5,13 @@ import torch.nn.functional as F
 from torch_scatter import scatter_mean # scatter
 
 
-def ensemble_predictions(predictions, targets, ensemble_indices):
+def ensemble_predictions_and_targets(predictions, targets, ensemble_indices):
     ''' checks whether field has already been ensembled, if not, ensembles it using ensemble_indices'''
     unique_ensembles = torch.unique(ensemble_indices)
+
+    # if unique_ensembles.dim() != predictions.dim():
+    #     predictions = predictions.unsqueeze(0)
+    #     targets = targets.unsqueeze(0)
 
     # ensemble predictions
     is_input_already_ensembled = unique_ensembles.shape[0] == predictions.shape[0]
@@ -20,6 +24,20 @@ def ensemble_predictions(predictions, targets, ensemble_indices):
         targets = scatter_mean(targets, ensemble_indices) # acts just as selection and ordering wrt unique_ensembles
 
     return predictions, targets
+
+
+# class EnsembleLoss:
+#     def __call__(
+#         self,
+#         pred:dict,
+#         ref:dict,
+#         predictions:torch.Tensor,
+#         targets:torch.Tensor,
+#     ):
+#         assert 'ensemble_index' in pred
+#         assert 'ensemble_index' in ref
+#         predictions_ensembled, targets_ensembled = ensemble_predictions_and_targets(predictions, targets, pred['ensemble_index'])
+#         return predictions_ensembled, targets_ensembled
 
 
 class FocalLossBinaryAccuracy:
@@ -98,7 +116,7 @@ class BinaryAccuracy:
 
         if 'ensemble_index' in pred:
             assert 'ensemble_index' in ref
-            logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
+            logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
 
         binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
         return torch.abs(targets_binary - binarized_predictions)
@@ -130,7 +148,7 @@ class EnsembleBCEWithLogitsLoss:
 
         if 'ensemble_index' in pred:
             assert 'ensemble_index' in ref
-            logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
+            logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
 
         return F.binary_cross_entropy_with_logits(
             logits,
