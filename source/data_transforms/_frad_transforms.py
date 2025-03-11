@@ -138,21 +138,26 @@ def coord_noise(data:AtomicData, noise_scale:float=0.04):
     return data
 
 
-# Define a function to calculate noise scale based on atomic number
-def noise_scale_fn(base_noise_scale, atomic_number):
-    # return base_noise_scale / (atomic_number + 1)  # Adding 1 to avoid division by zero
-    return 0.4 / (atomic_number + 1.e-4)
-
-def atomic_weighted_coord_noise(data: AtomicData, base_noise_scale: float = 0.04):
-    data = deepcopy(data)  # Create a deep copy of the data to avoid in-place modifications
-
-    # Calculate noise for each atom based on its atomic number
-    noise_scales = np.array([noise_scale_fn(base_noise_scale, atomic_number) for atomic_number in data['node_types']])
-
-    # Generate noise for each atom
-    # noise = np.random.normal(0, 1, size=data.pos.shape) * noise_scales[:, None]
-    noise = np.array([np.random.normal(0, scale, size=3) for scale in noise_scales])
-
-    data.noise_target = torch.from_numpy(noise).to(torch.float32)
-    data.pos += data.noise_target
+def no_noise(data):
+    data.noise_target = torch.zeros_like(data.pos)
     return data
+
+
+# # Define a function to calculate noise scale based on atomic number
+# def noise_scale_fn(base_noise_scale, atomic_number):
+#     # return base_noise_scale / (atomic_number + 1)  # Adding 1 to avoid division by zero
+#     return 0.4 / (atomic_number + 1.e-4)
+
+# def atomic_weighted_coord_noise(data: AtomicData, base_noise_scale: float = 0.04):
+#     data = deepcopy(data)  # Create a deep copy of the data to avoid in-place modifications
+
+#     # Calculate noise for each atom based on its atomic number
+#     noise_scales = np.array([noise_scale_fn(base_noise_scale, atomic_number) for atomic_number in data['node_types']])
+
+#     # Generate noise for each atom
+#     # noise = np.random.normal(0, 1, size=data.pos.shape) * noise_scales[:, None]
+#     noise = np.array([np.random.normal(0, scale, size=3) for scale in noise_scales])
+
+#     data.noise_target = torch.from_numpy(noise).to(torch.float32)
+#     data.pos += data.noise_target
+#     return data
