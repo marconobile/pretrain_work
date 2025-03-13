@@ -3,6 +3,7 @@
 import torch.nn
 import torch.nn.functional as F
 from torch_scatter import scatter_mean # scatter
+from torcheval.metrics import BinaryAccuracy as TorchBinaryAccuracy
 
 
 def ensemble_predictions_and_targets(predictions, targets, ensemble_indices):
@@ -98,7 +99,8 @@ class BinaryAccuracy:
             setattr(self, key, value)
 
         self.func_name = "BinaryAccuracy"
-        self.treshold_for_positivity = .5
+        # self.treshold_for_positivity = .5
+        self.metric = TorchBinaryAccuracy()
 
     def __call__(
         self,
@@ -113,13 +115,17 @@ class BinaryAccuracy:
 
         logits = pred[key].squeeze()
         targets_binary = ref[key].squeeze()
+        self.metric.update(logits.softmax(-1).argmax(-1),targets_binary)
+        acc = self.metric.compute()
+        self.metric.reset() # reset at each batch
+        return acc.to(logits.device)
 
-        if 'ensemble_index' in pred:
-            assert 'ensemble_index' in ref
-            logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
+        # if 'ensemble_index' in pred:
+        #     assert 'ensemble_index' in ref
+        #     logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
 
-        binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
-        return torch.abs(targets_binary - binarized_predictions)
+        # binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
+        # return torch.abs(targets_binary - binarized_predictions)
 
 
 class EnsembleBCEWithLogitsLoss:
@@ -155,3 +161,41 @@ class EnsembleBCEWithLogitsLoss:
             targets_binary,
             reduction="mean" if mean else "none"
         )
+
+
+# class OLDBinaryAccuracy:
+#     def __init__(
+#         self,
+#         func_name: str,
+#         params: dict = {},
+#         **kwargs,
+#     ):
+#         self.params = params
+#         for key, value in kwargs.items():
+#             setattr(self, key, value)
+
+#         self.func_name = "BinaryAccuracy"
+#         self.treshold_for_positivity = .5
+
+#     def __call__(
+#         self,
+#         pred: dict,
+#         ref: dict,
+#         key: str,
+#         mean: bool = True,
+#         **kwargs,
+#     ):
+#         if mean:
+#             raise(f"{__class__.__name__} cannot be used as loss function for training")
+
+#         logits = pred[key].squeeze()
+#         targets_binary = ref[key].squeeze()
+
+#         # if 'ensemble_index' in pred:
+#         #     assert 'ensemble_index' in ref
+#         #     logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
+#         try:
+#             binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
+#         except:
+#             binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float()
+#         return torch.abs(targets_binary - binarized_predictions)
