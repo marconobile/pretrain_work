@@ -9,6 +9,59 @@ import warnings
 
 
 
+from rdkit.Chem import Fragments
+from source.utils.rdkit_fragments import frag2num, num2frag
+
+def get_molecule_fragments(mol:rdChem.Mol):
+
+    def _get_fragments_dict(mol):
+        """
+        Get all fragment descriptors present in a molecule.
+
+        Parameters:
+        - mol: RDKit molecule object
+
+        Returns:
+        - dict: Dictionary of fragment descriptors and their counts
+        """
+        fragment_dict = {}
+        for func in dir(Fragments):
+            if func.startswith('fr_'):
+                try:
+                    count = getattr(Fragments, func)(mol)
+                    if count > 0:
+                        fragment_dict[func] = count
+                except:
+                    continue
+        return fragment_dict
+
+    fragment_dict = _get_fragments_dict(mol)
+    fragmentsIds = []
+    num_of_frags = 0
+    for k, v in fragment_dict.items():
+        fragmentsIds.append(frag2num[k])
+        num_of_frags+=v
+
+    binarizedFragmentsIds = np.zeros(86, dtype=int)
+    binarizedFragmentsIds[fragmentsIds] = 1 # 1 if fragId present, 0 otherwise
+    return binarizedFragmentsIds, num_of_frags
+
+
+def pyg2mol(pyg, removeHs:bool):
+    mol = rdChem.MolFromSmiles(pyg.smiles, smi_reader_params(removeHs))
+    if removeHs:
+        mol = rdChem.RemoveHs(mol)
+    else:
+        mol = rdChem.AddHs(mol)
+
+    if pyg.pos[0].shape[0] != 1:
+        out = set_coords(mol, pyg.pos[0])
+    else:
+        out = set_coords(mol, pyg.pos)
+
+    return out
+
+
 def atomic_number_to_symbol(atomic_number: int) -> str:
     """Convert atomic number to atomic symbol using RDKit."""
     return GetPeriodicTable().GetElementSymbol(atomic_number)
@@ -89,7 +142,7 @@ def smi_writer_params():
   return writer_params
 
 
-def smi_reader_params():
+def smi_reader_params(removeHs:bool):
   '''to be used in Chem.MolFromSmiles
   docs: https://www.rdkit.org/docs/cppapi/structRDKit_1_1v1_1_1SmilesParserParams.html
   defaults/signature:
@@ -103,7 +156,7 @@ def smi_reader_params():
   bool 	skipCleanup = false
   '''
   params = rdChem.SmilesParserParams()
-  params.removeHs = False # if input smi did not have hs then parsed smi will not have hs
+  params.removeHs = removeHs # if input smi did not have hs then parsed smi will not have hs
   params.parseName = False
   return params
 
@@ -130,12 +183,15 @@ def minimize_energy(mol):
   # todo: add check on mol conformers: if mol has no conformers then this fuction cannot be executed
   not_converged = True
   attempts = 0
+  mol = rdChem.AddHs(mol)
   while not_converged:
     not_converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, numThreads=1)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
     attempts +=1
     if attempts == 10:
       warnings.warn("returning before reaching convergence")
+      mol = rdChem.RemoveHs(mol)
       return mol, energy
+  mol = rdChem.RemoveHs(mol)
   return mol, energy
 
 
@@ -279,4 +335,10 @@ def fix_conformer(mol, max_iterations=200, force_field='UFF', convergence_criter
     if displacement > convergence_criteria:
         print("Warning: The displacement is higher than the convergence criteria. Consider increasing the number of iterations.")
 
+    return mol
+
+
+def plot_mol_with_atom_idxs(mol):
+    from rdkit.Chem.Draw import IPythonConsole
+    IPythonConsole.drawOptions.addAtomIndices = True
     return mol

@@ -1,0 +1,77 @@
+default_dtype: float32
+append: true # append (bool): if True, append the old model files and append the same logfile
+debug: false
+
+# - cutoffs - #
+# avg_num_neighbors: 50.639081131
+
+# - radial basis - #
+edge_radial_attrs_basis: geqtrain.nn.BesselBasisVec
+TanhCutoff_n: 6
+
+# - symmetry - #
+l_max: 2
+parity: o3_full
+
+# --- interaction layers --- #
+num_layers: 2
+env_embed_multiplicity: 32
+latent_dim: 256
+
+two_body_latent: geqtrain.nn.ScalarMLPFunction
+two_body_latent_mlp_latent_dimensions: [128, 256, 512]
+two_body_latent_mlp_nonlinearity: swiglu
+two_body_latent_has_bias: true
+
+latent: geqtrain.nn.ScalarMLPFunction
+latent_mlp_latent_dimensions: [256, 256, 256]
+latent_mlp_nonlinearity: swiglu
+latent_has_bias: true
+
+env_embed: geqtrain.nn.ScalarMLPFunction
+env_embed_mlp_latent_dimensions: [256, 256, 256]
+env_embed_mlp_nonlinearity: swiglu
+env_embed_has_bias: true
+
+# --- update attrs --- #
+update_mlp_latent_dimensions: [256, 256, 256]
+update_mlp_nonlinearity: swiglu
+update_has_bias: true
+
+context_aware_interaction_output_ls: [0, 1]
+
+# logging
+verbose: info
+wandb: true
+wandb_watch: true # - log gradients and/or parameters of the model - #
+# # code_folder_name: qm9 # - use if you run geqtrain from a different repo, to save source code of your repo - #
+wandb_watch_kwargs:
+    log: 'gradients' # 'gradients', 'parameters', 'all', comment whole wandb_watch_kwargs to do not log any of previous
+    log_freq: 1000  # upload log every N batches
+
+
+# optimizer
+optimizer_name: AdamW
+optimizer_params:
+  amsgrad: false
+  betas: !!python/tuple
+  - 0.9
+  - 0.999
+  eps: 1.0e-08 # do not change this
+  weight_decay: 0
+  fused: true
+
+
+# Configure maximum batch sizes to avoid GPU memory errors. These parameters have to be configured according to your GPU RAM
+skip_chunking: true
+batch_max_atoms: 1000000             # Limit the maximum number of nodes of a graph to be loaded on memory in a single batch
+
+
+dloader_timeout: 0
+# dataloader_num_workers: 2
+dloader_prefetch_factor: 4
+
+
+train_val_split: random
+shuffle: true
+report_init_validation: false

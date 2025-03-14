@@ -9,6 +9,7 @@ from pathlib import Path
 from numpy.lib.npyio import NpzFile
 import torch
 from source.utils.data_utils.featurizer import possible_bond_properties
+from scipy.spatial.distance import pdist
 
 
 def get_field_from_npzs(path:str, field:Union[str, List]='*') -> List[NpzFile]:
@@ -38,6 +39,12 @@ def get_field_from_npzs(path:str, field:Union[str, List]='*') -> List[NpzFile]:
     sn.__setattr__("path", path)
     out.append(sn)
   return out
+
+def get_categories(npz_list, field):
+    out = set()
+    for el in npz_list:
+        for i in el[field]: out.add(i)
+    return out
 
 
 def save_npz(pyg_mols, split:bool=True, folder_name:str=None, N:int=None, idx:int=0):
@@ -135,3 +142,7 @@ def test_npz_validity(file):
         print(f'Error loading {file}: {e}. Removed {file}')
         silentremove(file)
         return False
+
+
+def get_min_dist_intra_mol(pos_matrix):
+   return np.min(pdist(pos_matrix, 'euclidean'))

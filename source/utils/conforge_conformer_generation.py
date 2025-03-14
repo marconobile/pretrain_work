@@ -13,44 +13,51 @@ RDLogger.DisableLog('rdApp.*')
 
 def smi2npz(
     save_dir:str,
-    generate_confs:bool,
     smi_list:list,
+    generate_confs:bool=True,
     ys:list|None=None,
     split:bool=True,
-    n_confs_to_keep:int=10,
-    n_confs_to_generate:int=100,
+    minRMSD:float=1.5,
+    n_confs_to_keep:int=1,
+    n_confs_to_generate:int=10,
+    write:bool=True,
+    filter_via_dihedral_fingerprint:bool=False,
 ) -> None:
 
     '''given a smile, save associated npz in save_dir'''
 
+    # handle the case of no targets
     ys_provided = ys is not None
     if ys is None:
         ys = [None] * len(smi_list)
 
-    conforge_settings = getSettings(minRMSD = 1.5, max_num_out_confs_to_generate=n_confs_to_generate) if generate_confs else None
-
+    conforge_settings = getSettings(minRMSD = minRMSD, max_num_out_confs_to_generate=n_confs_to_generate) if generate_confs else None
     pyg_mols_to_save = []
     n_mols_skipped = 0
     print(f"Initial number of smiles {len(smi_list)}")
     for smi, y in tqdm(zip(smi_list, ys), total=len(smi_list), desc="Processing SMILES"):
         smi = drop_disconnected_components(smi)
         if generate_confs:
-            conformers = generate_conformers(smi, conforge_settings, n_confs_to_keep)
+            conformers = generate_conformers(smi,
+                                             conforge_settings,
+                                             n_confs_to_keep,
+                                             filter_via_dihedral_fingerprint=filter_via_dihedral_fingerprint)
             if not conformers:
                 n_mols_skipped +=1
                 continue
-            pyg_mol = mol2pyg(conformers[0])
+            pyg_mol = mol2pyg(conformers[0]) # set all non-pos-related fields
             if pyg_mol is None:
                 n_mols_skipped +=1
                 continue
-            pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol)
+            pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol) # set pos of all confs
         else:
-            mol = rdChem.MolFromSmiles(smi)
-            mol = preprocess_mol(mol, addHs=False)
-            pyg_mol = mol2pyg(mol, use_rdkit_3d=True)
-            if pyg_mol is None:
-                n_mols_skipped +=1
-                continue
+            raise ValueError("Better to use generate_confs=True")
+            # mol = rdChem.MolFromSmiles(smi)
+            # mol = preprocess_mol(mol, addHs=False)
+            # pyg_mol = mol2pyg(mol, use_rdkit_3d=True)
+            # if pyg_mol is None:
+            #     n_mols_skipped +=1
+            #     continue
 
         if ys_provided:
             pyg_mol.y = np.array(y, dtype=np.float32)
@@ -58,7 +65,9 @@ def smi2npz(
 
     print(f'number of mols skipped: {n_mols_skipped}')
     print(f"Final number of smiles {len(pyg_mols_to_save)}")
-    save_npz(pyg_mols_to_save, folder_name=save_dir, split=split)
+    if write:
+        save_npz(pyg_mols_to_save, folder_name=save_dir, split=split)
+    return pyg_mols_to_save, n_mols_skipped
 
 
 ############
@@ -122,7 +131,7 @@ def generateConformationEnsembles(mol: CDPLChem.BasicMolecule, conf_gen: ConfGen
     - int: Number of generated conformers.
     """
     # prepare the molecule for conformer generation
-    ConfGen.prepareForConformerGeneration(mol)
+    ConfGen.prepareForConformerGeneration(mol) #! in here all the preprocessing required for the conf gen is done automatically
 
     # generate the conformer ensemble
     status = conf_gen.generate(mol)
@@ -177,13 +186,18 @@ def getSettings(minRMSD:float, max_num_out_confs_to_generate:int = 100) -> ConfG
 #         return load_conformers_from_sdf(tmp_mol_ensemble, nconfstokeep)
 
 
-def generate_conformers(smi:str,
+def generate_conformers(
+    smi:str,
     conf_gen:ConfGen.ConformerGenerator,
     max_num_out_confs_to_keep:int,
     tmp_dir:str='/home/nobilm@usi.ch/pretrain_paper/tmp/',
     filter_via_dihedral_fingerprint:bool=False,
     removeHs:bool=True,
 )-> list:
+    '''
+    tmp folder is used to write/read output of conforge, tmp file is delete right after
+    removeHs:bool=True whether to remove Hs from output
+    '''
     mol = CDPLChem.parseSMILES(smi)
     status, num_confs = generateConformationEnsembles(mol, conf_gen)
     print(f"{num_confs} for {smi}")
@@ -204,7 +218,7 @@ def generate_conformers(smi:str,
         silentremove(unique_filename)
         if filter_via_dihedral_fingerprint:
             return load_conformers_from_sdf(mol_ensemble, max_num_out_confs_to_keep)
-        return mol_ensemble
+        return mol_ensemble[:max_num_out_confs_to_keep]
 
 
 

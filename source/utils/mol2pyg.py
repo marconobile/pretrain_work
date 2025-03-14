@@ -2,9 +2,9 @@ import torch
 import numpy as np
 import warnings
 from rdkit import Chem as rdChem
-from source.utils.mol_utils import smi_reader_params, set_coords, get_rdkit_conformer
+from source.utils.mol_utils import get_molecule_fragments, smi_reader_params, set_coords, get_rdkit_conformer
 from source.data_transforms.utils import get_torsions, GetDihedral
-
+from rdkit.Chem import Descriptors
 try:
     from geqtrain.utils.torch_geometric import Data
 except ImportError:
@@ -15,8 +15,6 @@ from source.utils.data_utils.featurizer import atom_to_feature_vector, possible_
 from collections import defaultdict
 
 
-def pyg2mol(pyg):
-    return set_coords(rdChem.AddHs(rdChem.MolFromSmiles(pyg.smiles, smi_reader_params())), pyg.pos)
 
 
 def mols2pyg_list(mols:list, smiles:list, **mol2pyg_kwargs)-> list:
@@ -110,16 +108,24 @@ def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False) -> Data:
     perm = (edge_index[0] * num_atoms + edge_index[1]).argsort()
     edge_index = edge_index[:, perm]
     bonds_features = {k:torch.tensor(v, dtype=torch.short)[perm] for k,v in bonds_features.items()} # k:tensor of shape (E)
-
     assert edge_index.shape[-1] ==  num_atoms*(num_atoms-1)
+
+    fragmentdsIds_present, count_frags = get_molecule_fragments(mol) # binarized = presence, count = cumulative count
+    int_molecular_properties = {
+        "h_donors"    : Descriptors.NumHDonors(mol),
+        "h_acceptors" : Descriptors.NumHAcceptors(mol),
+        "count_frags" : count_frags,
+    }
 
     return Data(
         adj_matrix=torch.tensor(adj_matrix, dtype=torch.short),
         pos=torch.tensor(pos, dtype=torch.float32),
         rotable_bonds=torch.tensor(rotable_bonds, dtype=torch.short),
+        fragmentdsIds_present=torch.tensor(fragmentdsIds_present, dtype=torch.float32), # needed to be float
         dihedral_angles_degrees=torch.tensor(dihedral_angles_degrees, dtype=torch.float32),
         **{k: torch.tensor(v, dtype=torch.short) for k, v in atoms_features.items()},
         edge_index=edge_index,
         **bonds_features,
-        smiles=rdChem.MolToSmiles(mol, canonical=True)
+        smiles=rdChem.MolToSmiles(mol, canonical=True),
+        **int_molecular_properties,
     )

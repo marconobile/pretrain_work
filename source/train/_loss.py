@@ -163,39 +163,39 @@ class EnsembleBCEWithLogitsLoss:
         )
 
 
-# class OLDBinaryAccuracy:
-#     def __init__(
-#         self,
-#         func_name: str,
-#         params: dict = {},
-#         **kwargs,
-#     ):
-#         self.params = params
-#         for key, value in kwargs.items():
-#             setattr(self, key, value)
+class OLDBinaryAccuracy:
+    def __init__(
+        self,
+        func_name: str,
+        params: dict = {},
+        **kwargs,
+    ):
+        self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
-#         self.func_name = "BinaryAccuracy"
-#         self.treshold_for_positivity = .5
+        self.func_name = "BinaryAccuracy"
+        self.treshold_for_positivity = .5
 
-#     def __call__(
-#         self,
-#         pred: dict,
-#         ref: dict,
-#         key: str,
-#         mean: bool = True,
-#         **kwargs,
-#     ):
-#         if mean:
-#             raise(f"{__class__.__name__} cannot be used as loss function for training")
+    def __call__(
+        self,
+        pred: dict,
+        ref: dict,
+        key: str,
+        mean: bool = True,
+        **kwargs,
+    ):
+        if mean:
+            raise(f"{__class__.__name__} cannot be used as loss function for training")
 
-#         logits = pred[key].squeeze()
-#         targets_binary = ref[key].squeeze()
+        logits = pred[key].squeeze()
+        targets_binary = ref[key].squeeze()
 
-#         # if 'ensemble_index' in pred:
-#         #     assert 'ensemble_index' in ref
-#         #     logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
-#         try:
-#             binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
-#         except:
-#             binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float()
-#         return torch.abs(targets_binary - binarized_predictions)
+        # if 'ensemble_index' in pred:
+        #     assert 'ensemble_index' in ref
+        #     logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
+        try:
+            binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
+        except:
+            binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float()
+        return torch.abs(targets_binary - binarized_predictions)
