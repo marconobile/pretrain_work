@@ -249,11 +249,17 @@ def visualize_3d_mols(mols,
     assert len(titles) == len(mols), "Length of titles must match the number of molecules."
 
     p = py3Dmol.view(width=width, height=height, viewergrid=grid)
-    for j in range(len(mols)):
-        p.removeAllModels(viewer=(0, j))
-        p.addModel(rdChem.MolToMolBlock(mols[j], confId=0), 'sdf', viewer=(0, j))
-        p.setStyle({drawing_style: {}}, viewer=(0, j))
-        if titles[j]: p.addLabel(titles[j], viewer=(0, j)) # , {'position': {'x': 0, 'y': 1.5, 'z': 0}, 'backgroundColor': 'white', 'fontSize': 16}
+    nrows = grid[0]
+    ncols = grid[1]
+
+
+    for row_idx in range(nrows):
+        for col_idx in range(ncols):
+            mol_idx = row_idx * ncols + col_idx
+            p.removeAllModels(viewer=(row_idx, col_idx))
+            p.addModel(rdChem.MolToMolBlock(mols[mol_idx], confId=0), 'sdf', viewer=(row_idx, col_idx))
+            p.setStyle({drawing_style: {}},  viewer=(row_idx, col_idx))
+            if titles[mol_idx]: p.addLabel(titles[mol_idx],  viewer=(row_idx, col_idx)) # , {'position': {'x': 0, 'y': 1.5, 'z': 0}, 'backgroundColor': 'white', 'fontSize': 16}
     p.zoomTo()
     p.show()
 

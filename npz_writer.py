@@ -8,16 +8,17 @@ from source.utils.npz_utils import get_field_from_npzs
 ####################################################
 
 # INPUT
-path = '/home/nobilm@usi.ch/pretrain_paper/data/moelculenet/bace.csv'
-out = parse_csv(path, [0,2])
-out.keys()
-smiles = out['mol']
-ys = out['Class']
+path:str = '/home/nobilm@usi.ch/pretrain_paper/data/moelculenet/lipophilicity.csv'
+out = parse_csv(path, [1,2]) # bace: [0,2]
+smiles = out['smiles'] # bace: mol
+ys = out['exp'] # bace: Class
+save_dir:str = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/lipo_single_conf_with_frags'
+
+
 
 # PARAMS
-save_dir:str = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/bace_single_conf_with_fragsTEST'
 scaffold_splitting:bool = True # add option for label-based splitting
-n_confs_to_keep:int=2
+n_confs_to_keep:int=1
 n_confs_to_generate:int=10
 minRMSD:float=1.5
 filter_via_dihedral_fingerprint:bool=False

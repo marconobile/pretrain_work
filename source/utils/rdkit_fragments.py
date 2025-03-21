@@ -1,6 +1,6 @@
 '''CLASSES OBTAINED VIA THE FOLLOWING CODE:
 
-    from rdkit.Chem import Fragments
+    from rdkit.Chem import Fragments # https://rdkit.org/docs/source/rdkit.Chem.Fragments.html#
     possible_fragments = set()
     for func in dir(Fragments):
         if func.startswith('fr_'):

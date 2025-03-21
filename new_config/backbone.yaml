@@ -10,13 +10,11 @@ edge_radial_attrs_basis: geqtrain.nn.BesselBasisVec
 TanhCutoff_n: 6
 
 # - symmetry - #
-l_max: 2
 parity: o3_full
 
 # --- interaction layers --- #
 num_layers: 2
 env_embed_multiplicity: 32
-latent_dim: 256
 
 two_body_latent: geqtrain.nn.ScalarMLPFunction
 two_body_latent_mlp_latent_dimensions: [128, 256, 512]

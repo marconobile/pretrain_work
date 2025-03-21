@@ -12,7 +12,7 @@ def coords2dist(coords):
 def add_coords_noise(coords, noise_level:float=0.2, noise_smoothing:float=1.0):
     noise = coords.new(coords.size()).normal_(0, noise_level)
     dist_mat = coords2dist(coords)
-    smooth_mat = torch.softmax(-dist_mat/noise_smoothing, -1)
+    smooth_mat = torch.softmax(-dist_mat/noise_smoothing, -1) 
     noise = torch.matmul(smooth_mat, noise)
     new_coords = coords + noise
     return new_coords, noise

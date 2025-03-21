@@ -155,7 +155,7 @@ def tgt_noise(data, noise_scale:float=0.2):
 def frad_TGT(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.04):
     # the idea is that coords_noise_scale is LOW
     # data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
-    apply_dihedral_noise_(data)
+    apply_dihedral_noise_(data) # , dihedral_scale=30.0)
 
     if not add_coords_noise:
         data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
