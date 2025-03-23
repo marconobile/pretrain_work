@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from scipy.spatial.distance import pdist
-# from copy import deepcopy
+from copy import deepcopy
 
 from geqtrain.data.AtomicData import AtomicData
 
@@ -123,7 +123,7 @@ def apply_coords_noise_(data:AtomicData, coords_noise_scale:float):
 
 def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.04):
     # the idea is that coords_noise_scale is LOW
-    # data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
     apply_dihedral_noise_(data)
 
     if not add_coords_noise:
@@ -135,7 +135,7 @@ def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:floa
 
 
 def coord_noise(data:AtomicData, noise_scale:float=0.04):
-    # data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
     data.noise_target = torch.from_numpy(np.random.normal(0, 1, size=data.pos.shape) * noise_scale).to(torch.float32)
     data.pos += data.noise_target
     return data
@@ -147,14 +147,14 @@ def no_noise(data):
 
 
 def tgt_noise(data, noise_scale:float=0.2):
-    # data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
     data.pos, data.noise_target = add_coords_noise(data.pos, noise_level=noise_scale)
     return data
 
 
 def frad_TGT(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.04):
     # the idea is that coords_noise_scale is LOW
-    # data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
     apply_dihedral_noise_(data) # , dihedral_scale=30.0)
 
     if not add_coords_noise:
