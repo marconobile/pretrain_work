@@ -147,7 +147,7 @@ def no_noise(data):
 
 
 def tgt_noise(data, noise_scale:float=0.2):
-    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+    # data = deepcopy(data) #!decomment if used by itself # in-place op to the data obj persist thru dloader iterations
     data.pos, data.noise_target = add_coords_noise(data.pos, noise_level=noise_scale)
     return data
 
