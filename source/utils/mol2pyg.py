@@ -38,7 +38,7 @@ def mols2pyg_list_with_targets(mols, smiles, ys, **mol2pyg_kwargs):
     return pyg_mols
 
 
-def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False) -> Data:
+def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, nsafe:int|None=None) -> Data:
     '''
     IMPO: do not trust smiles: given smi -> get MOL -> addHs -> do work. Then for any other place where you need to act on MOL, restart from input smi and repeat smi -> get MOL -> addHs -> do work
     IMPO: this does not set y
@@ -116,6 +116,10 @@ def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False) -> Data:
         "h_acceptors" : Descriptors.NumHAcceptors(mol),
         "count_frags" : count_frags,
     }
+    if nsafe:
+        int_molecular_properties.update(
+            {"safe_count" : nsafe}
+        )
 
     return Data(
         adj_matrix=torch.tensor(adj_matrix, dtype=torch.short),

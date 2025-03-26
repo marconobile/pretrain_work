@@ -22,6 +22,7 @@ def smi2npz(
     n_confs_to_generate:int=10,
     write:bool=True,
     filter_via_dihedral_fingerprint:bool=False,
+    safe_counts:list|None=None,
 ) -> None:
 
     '''given a smile, save associated npz in save_dir'''
@@ -31,11 +32,14 @@ def smi2npz(
     if ys is None:
         ys = [None] * len(smi_list)
 
+    if safe_counts is None:
+        safe_counts = [None] * len(smi_list)
+
     conforge_settings = getSettings(minRMSD = minRMSD, max_num_out_confs_to_generate=n_confs_to_generate) if generate_confs else None
     pyg_mols_to_save = []
     n_mols_skipped = 0
     print(f"Initial number of smiles {len(smi_list)}")
-    for smi, y in tqdm(zip(smi_list, ys), total=len(smi_list), desc="Processing SMILES"):
+    for smi, y, nsafe in tqdm(zip(smi_list, ys, safe_counts), total=len(smi_list), desc="Processing SMILES"):
         smi = drop_disconnected_components(smi)
         if generate_confs:
             conformers = generate_conformers(smi,
@@ -45,7 +49,7 @@ def smi2npz(
             if not conformers:
                 n_mols_skipped +=1
                 continue
-            pyg_mol = mol2pyg(conformers[0]) # set all non-pos-related fields
+            pyg_mol = mol2pyg(conformers[0], nsafe=nsafe) # set all non-pos-related fields
             if pyg_mol is None:
                 n_mols_skipped +=1
                 continue
@@ -165,7 +169,7 @@ def smi_to_cdpl_mol(s):
 def getSettings(minRMSD:float, max_num_out_confs_to_generate:int = 100) -> ConfGen.ConformerGenerator:
     settings = ConfGen.ConformerGenerator()
     settings.settings.setSamplingMode(1) # AUTO = 0; SYSTEMATIC = 1; STOCHASTIC = 2;
-    settings.settings.timeout = 36000
+    settings.settings.timeout = 36000*3
     settings.settings.minRMSD = minRMSD
     print(f'Using minRMSD = {settings.settings.minRMSD}')
     settings.settings.energyWindow = 150000.0
