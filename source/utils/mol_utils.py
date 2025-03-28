@@ -98,7 +98,7 @@ def optimize_conformers(molecule):
     return energies, converged
 
 
-def get_rdkit_conformer(mol, max_attempts:int=10):
+def get_rdkit_conformer(mol, num_confs:int=1, max_attempts:int=10, optimize:bool=True):
     '''
     if returns none: mols not embeddable
     '''
@@ -108,16 +108,34 @@ def get_rdkit_conformer(mol, max_attempts:int=10):
         return conf if conf != -1 else None
     except:
         try:
-            success = AllChem.EmbedMolecule(mol,
-                                            useRandomCoords=True, # needs to be T
-                                            useSmallRingTorsions=True,
-                                            useMacrocycleTorsions=True,
-                                            maxAttempts=max_attempts
-                                          ) != -1
+            kwargs = {
+                'useRandomCoords':True, # needs to be T
+                'useSmallRingTorsions':True,
+                'useMacrocycleTorsions':True,
+                'maxAttempts':max_attempts,
+            }
+            if num_confs==1:
+                f = AllChem.EmbedMolecule
+            else:
+                f = AllChem.EmbedMultipleConfs
+                kwargs.update({'numConfs':num_confs})
+
+            out = f(mol, **kwargs)
+            if isinstance(out, int):
+                success = out != -1
+            elif isinstance(out, list):
+                success = len(out) != 0
+
             if success:
                 conf = mol.GetConformer() # if mol embedding worked should be ok
-                return conf if conf != -1 else None
-        except: return None
+                if conf != -1:
+                    if optimize and num_confs>1:
+                        for conf_id in out:
+                            AllChem.UFFOptimizeMolecule(mol, confId=conf_id)
+                    return conf
+                return None
+        except:
+            return None
     return None
 
 
@@ -173,7 +191,7 @@ def get_energy(mol):
   return energy
 
 
-def minimize_energy(mol):
+def minimize_energy(mol, n_steps:int=-1):
   '''
   RDKit performs energy minimization of mol conformation using the Merck Molecular Force Field (MMFF94).
   kilocalories per mole (kcal/mol)  energies are reported in kcal mol-1.
@@ -187,7 +205,7 @@ def minimize_energy(mol):
   while not_converged:
     not_converged, energy = AllChem.MMFFOptimizeMoleculeConfs(mol, numThreads=1)[0] # return: list of (not_converged, energy) 2-tuples. If not_converged is 0 the optimization converged for that conformer.
     attempts +=1
-    if attempts == 10:
+    if attempts == n_steps:
       warnings.warn("returning before reaching convergence")
       mol = rdChem.RemoveHs(mol)
       return mol, energy

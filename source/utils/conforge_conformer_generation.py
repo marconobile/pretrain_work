@@ -4,12 +4,19 @@ https://cdpkit.org/cdpl_python_tutorial/cdpl_python_tutorial.html#generating-con
 '''
 import torch
 import numpy as np
+from source.data_transforms._frad_transforms import apply_dihedral_noise_
 from source.utils.mol2pyg import mol2pyg
 from source.utils.npz_utils import save_npz
 from tqdm import tqdm
 from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*')
+import warnings
 
+def smi2pyg_mol_rdkit3d(smi:str, nsafe=None, nconfs:int=1):
+    mol = rdChem.MolFromSmiles(smi)
+    mol = preprocess_mol(mol, addHs=False)
+    conf = get_rdkit_conformer(mol, num_confs=nconfs)
+    return mol2pyg(mol, use_rdkit_3d=True, nsafe=nsafe)
 
 def smi2npz(
     save_dir:str,
@@ -23,9 +30,16 @@ def smi2npz(
     write:bool=True,
     filter_via_dihedral_fingerprint:bool=False,
     safe_counts:list|None=None,
+    fill_with_frad:bool=True,
 ) -> None:
 
     '''given a smile, save associated npz in save_dir'''
+
+    if os.path.exists(save_dir):
+        raise FileExistsError(f"The directory '{save_dir}' already exists. Please provide a different directory or remove the existing one.")
+
+    if not generate_confs:
+        warnings.warn("Better to use generate_confs=True")
 
     # handle the case of no targets
     ys_provided = ys is not None
@@ -36,6 +50,10 @@ def smi2npz(
         safe_counts = [None] * len(smi_list)
 
     conforge_settings = getSettings(minRMSD = minRMSD, max_num_out_confs_to_generate=n_confs_to_generate) if generate_confs else None
+    if fill_with_frad and n_confs_to_keep>1:
+        fill_with_frad=n_confs_to_keep
+    else:
+        fill_with_frad = -1
     pyg_mols_to_save = []
     n_mols_skipped = 0
     print(f"Initial number of smiles {len(smi_list)}")
@@ -46,22 +64,27 @@ def smi2npz(
                                              conforge_settings,
                                              n_confs_to_keep,
                                              filter_via_dihedral_fingerprint=filter_via_dihedral_fingerprint)
+
             if not conformers:
-                n_mols_skipped +=1
+                warnings.warn("Could not generate confs for smi: {smi}, falling back to rdkit")
+                pyg_mol = smi2pyg_mol_rdkit3d(smi, nsafe=nsafe, nconfs=n_confs_to_keep)
+                if pyg_mol is None:
+                    n_mols_skipped +=1
                 continue
+
             pyg_mol = mol2pyg(conformers[0], nsafe=nsafe) # set all non-pos-related fields
+
             if pyg_mol is None:
                 n_mols_skipped +=1
                 continue
-            pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol) # set pos of all confs
+
+            pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol, fill_with_frad) # set pos of all confs
+
         else:
-            raise ValueError("Better to use generate_confs=True")
-            # mol = rdChem.MolFromSmiles(smi)
-            # mol = preprocess_mol(mol, addHs=False)
-            # pyg_mol = mol2pyg(mol, use_rdkit_3d=True)
-            # if pyg_mol is None:
-            #     n_mols_skipped +=1
-            #     continue
+            pyg_mol = smi2pyg_mol_rdkit3d(smi, nsafe=nsafe, nconfs=n_confs_to_keep)
+            if pyg_mol is None:
+                n_mols_skipped +=1
+                continue
 
         if ys_provided:
             pyg_mol.y = np.array(y, dtype=np.float32)
@@ -85,12 +108,14 @@ import numpy as np
 import tempfile
 import CDPL.ConfGen as ConfGen
 import CDPL.Chem as CDPLChem
-from source.utils.mol_utils import drop_disconnected_components, get_dihedral_angles, preprocess_mol
+from source.utils.mol_utils import drop_disconnected_components, get_dihedral_angles, get_rdkit_conformer, preprocess_mol
 from source.utils.rdkit_conformer_generation import *
 from source.utils.file_handling_utils import silentremove
 from einops import repeat
+from source.data_transforms._frad_transforms import apply_dihedral_noise_
+from copy import deepcopy
 
-def set_conformer_in_pyg_mol(conformers, pyg_mol):
+def set_conformer_in_pyg_mol(conformers, _pyg_mol, frad_fill_target:int=-1):
     batched_pos = []
     for mol in conformers:
         pos = []
@@ -101,11 +126,22 @@ def set_conformer_in_pyg_mol(conformers, pyg_mol):
         pos = torch.tensor(pos, dtype=torch.float32)
         batched_pos.append(pos)
 
+    og_pyg_mol = deepcopy(_pyg_mol)
+    if frad_fill_target>0:
+        is_target_reached = lambda: len(batched_pos) == frad_fill_target
+        while not is_target_reached():
+            for i in range(len(batched_pos)):
+                _pyg_mol.pos = batched_pos[i]
+                apply_dihedral_noise_(_pyg_mol) # modifies inplace
+                batched_pos.append(deepcopy(_pyg_mol.pos))
+                if is_target_reached():
+                    break
+
     batched_pos = torch.stack(batched_pos)
-    pyg_mol.pos = batched_pos
-    pyg_mol.edge_index = pyg_mol.edge_index.unsqueeze(0) # (2, E) -> (1, 2, E)
-    pyg_mol.edge_index = repeat(pyg_mol.edge_index, 'b e d -> (repeat b) e d', repeat=batched_pos.shape[0]) # 1 edge index for each conf
-    return pyg_mol
+    og_pyg_mol.pos = batched_pos
+    og_pyg_mol.edge_index = og_pyg_mol.edge_index.unsqueeze(0) # (2, E) -> (1, 2, E)
+    og_pyg_mol.edge_index = repeat(og_pyg_mol.edge_index, 'b e d -> (repeat b) e d', repeat=batched_pos.shape[0]) # 1 edge index for each conf
+    return og_pyg_mol
 
 
 # mapping status codes to human readable strings
@@ -169,7 +205,7 @@ def smi_to_cdpl_mol(s):
 def getSettings(minRMSD:float, max_num_out_confs_to_generate:int = 100) -> ConfGen.ConformerGenerator:
     settings = ConfGen.ConformerGenerator()
     settings.settings.setSamplingMode(1) # AUTO = 0; SYSTEMATIC = 1; STOCHASTIC = 2;
-    settings.settings.timeout = 36000*3
+    settings.settings.timeout = 36000*4
     settings.settings.minRMSD = minRMSD
     print(f'Using minRMSD = {settings.settings.minRMSD}')
     settings.settings.energyWindow = 150000.0

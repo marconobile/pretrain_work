@@ -10,7 +10,7 @@ from source.utils.npz_utils import get_field_from_npzs
 
 scaffold_splitting:bool = False # add option for label-based splitting
 starting_path = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/bace_with_safe/train'
-save_dir = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/bace_with_safe/train_agumented' # it gets created
+save_dir = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/bace_with_safe/train_agumented_fix_num' # it gets created
 
 out = get_field_from_npzs(starting_path)
 smiles, ys, safe_counts = [], [], []
@@ -24,6 +24,7 @@ n_confs_to_keep:int=100
 n_confs_to_generate:int=200
 minRMSD:float=2.0
 filter_via_dihedral_fingerprint:bool=True
+fill_with_frad:bool=True
 
 # automatically generates 3d using CONFORGE
 pyg_mols_saved, n_mols_skipped = smi2npz(

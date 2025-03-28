@@ -13,7 +13,8 @@ TanhCutoff_n: 6
 parity: o3_full
 
 # --- interaction layers --- #
-num_layers: 2
+# gnn_layers: 3
+num_layers: 2 # per interaction block
 env_embed_multiplicity: 32
 
 two_body_latent: geqtrain.nn.ScalarMLPFunction
@@ -42,7 +43,7 @@ context_aware_interaction_output_ls: [0, 1]
 verbose: info
 wandb: true
 wandb_watch: true # - log gradients and/or parameters of the model - #
-# # code_folder_name: qm9 # - use if you run geqtrain from a different repo, to save source code of your repo - #
+code_folder_name: source # - use if you run geqtrain from a different repo, to save source code of your repo - #
 wandb_watch_kwargs:
     log: 'gradients' # 'gradients', 'parameters', 'all', comment whole wandb_watch_kwargs to do not log any of previous
     log_freq: 1000  # upload log every N batches

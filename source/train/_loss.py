@@ -115,7 +115,12 @@ class BinaryAccuracy:
 
         logits = pred[key].squeeze()
         targets_binary = ref[key].squeeze()
-        self.metric.update(logits.softmax(-1).argmax(-1),targets_binary)
+
+        predicted_label = logits.softmax(-1).argmax(-1)
+        if targets_binary.dim() == 0: # if bs = 1
+            targets_binary = targets_binary.unsqueeze(0)
+            predicted_label = predicted_label.unsqueeze(0)
+        self.metric.update(predicted_label, targets_binary)
         acc = self.metric.compute()
         self.metric.reset() # reset at each batch
         return acc.to(logits.device)
@@ -151,11 +156,9 @@ class EnsembleBCEWithLogitsLoss:
     ):
         logits = pred[key].squeeze()
         targets_binary = ref[key].squeeze()
-
-        if 'ensemble_index' in pred:
-            assert 'ensemble_index' in ref
-            logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
-
+        assert 'ensemble_index' in pred
+        assert 'ensemble_index' in ref
+        logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
         return F.binary_cross_entropy_with_logits(
             logits,
             targets_binary,

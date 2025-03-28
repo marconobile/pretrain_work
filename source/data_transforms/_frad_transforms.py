@@ -96,6 +96,7 @@ def set_dihedral_angle_(coords, j, k, current_angle_deg, desired_angle_deg, adja
 def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_interatomic_dist_required: float = 0.8):
     '''
     dihedral_scale: std of norm dist from which to sample the noise to add at torsional angles
+    ! here pos has shape: torch.Size([N, 3]), it has already been indexed across the possible frames/conformers
     '''
     if not data.rotable_bonds.size:
         return data
@@ -146,23 +147,23 @@ def no_noise(data):
     return data
 
 
-def tgt_noise(data, noise_scale:float=0.2):
-    # data = deepcopy(data) #!decomment if used by itself # in-place op to the data obj persist thru dloader iterations
-    data.pos, data.noise_target = add_coords_noise(data.pos, noise_level=noise_scale)
-    return data
+# def tgt_noise(data, noise_scale:float=0.2):
+#     # data = deepcopy(data) #!decomment if used by itself # in-place op to the data obj persist thru dloader iterations
+#     data.pos, data.noise_target = add_coords_noise(data.pos, noise_level=noise_scale)
+#     return data
 
 
-def frad_TGT(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.04):
-    # the idea is that coords_noise_scale is LOW
-    data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
-    apply_dihedral_noise_(data) # , dihedral_scale=30.0)
+# def frad_TGT(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.04):
+#     # the idea is that coords_noise_scale is LOW
+#     data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations
+#     apply_dihedral_noise_(data) # , dihedral_scale=30.0)
 
-    if not add_coords_noise:
-        data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
-        return data
+#     if not add_coords_noise:
+#         data.noise_target = torch.zeros_like(data.pos, dtype=torch.float32)
+#         return data
 
-    tgt_noise(data, coords_noise_scale)
-    return data
+#     tgt_noise(data, coords_noise_scale)
+#     return data
 
 # # Define a function to calculate noise scale based on atomic number
 # def noise_scale_fn(base_noise_scale, atomic_number):
