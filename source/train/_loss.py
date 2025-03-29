@@ -15,12 +15,20 @@ def ensemble_predictions_and_targets(predictions, targets, ensemble_indices):
     #     targets = targets.unsqueeze(0)
 
     # ensemble predictions
-    is_input_already_ensembled = unique_ensembles.shape[0] == predictions.shape[0]
+    if predictions.shape == torch.Size([]) and unique_ensembles.shape[0] == 1:
+        is_input_already_ensembled = True
+    else:
+        is_input_already_ensembled = unique_ensembles.shape[0] == predictions.shape[0]
+
     if not is_input_already_ensembled:
         predictions = scatter_mean(predictions, ensemble_indices)
 
     # ensemble targets
-    is_output_already_ensembled = unique_ensembles.shape[0] == targets.shape[0]
+    if targets.shape == torch.Size([]) and unique_ensembles.shape[0] == 1:
+        is_output_already_ensembled = True
+    else:
+        is_output_already_ensembled = unique_ensembles.shape[0] == targets.shape[0]
+
     if not is_output_already_ensembled:
         targets = scatter_mean(targets, ensemble_indices) # acts just as selection and ordering wrt unique_ensembles
 
