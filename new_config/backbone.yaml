@@ -13,7 +13,7 @@ TanhCutoff_n: 6
 parity: o3_full
 
 # --- interaction layers --- #
-# gnn_layers: 3
+gnn_layers: 2 # this includes the final interaction block
 num_layers: 2 # per interaction block
 env_embed_multiplicity: 32
 
@@ -21,21 +21,40 @@ two_body_latent: geqtrain.nn.ScalarMLPFunction
 two_body_latent_mlp_latent_dimensions: [128, 256, 512]
 two_body_latent_mlp_nonlinearity: swiglu
 two_body_latent_has_bias: true
+two_body_latent_gain: 1.55
 
 latent: geqtrain.nn.ScalarMLPFunction
 latent_mlp_latent_dimensions: [256, 256, 256]
 latent_mlp_nonlinearity: swiglu
 latent_has_bias: true
+latent_gain: 1.55
 
 env_embed: geqtrain.nn.ScalarMLPFunction
 env_embed_mlp_latent_dimensions: [256, 256, 256]
 env_embed_mlp_nonlinearity: swiglu
 env_embed_has_bias: true
+env_embed_gain: 1.55
 
 # --- update attrs --- #
 update_mlp_latent_dimensions: [256, 256, 256]
 update_mlp_nonlinearity: swiglu
 update_has_bias: true
+update_wd: true
+update_gain: 1.55
+
+update_emb_mlp_latent_dimensions: [256, 256, 256]
+update_emb_mlp_nonlinearity: swiglu
+update_emb_has_bias: true
+update_emb_wd: true
+update_emb_gain: 1.55
+
+update_0_mlp_latent_dimensions: [256, 256, 256]
+update_0_mlp_nonlinearity: swiglu
+update_0_has_bias: true
+update_0_wd: true
+update_0_gain: 1.55
+
+
 
 context_aware_interaction_output_ls: [0, 1]
 
