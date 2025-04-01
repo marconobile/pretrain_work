@@ -133,13 +133,6 @@ class BinaryAccuracy:
         self.metric.reset() # reset at each batch
         return acc.to(logits.device)
 
-        # if 'ensemble_index' in pred:
-        #     assert 'ensemble_index' in ref
-        #     logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
-
-        # binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
-        # return torch.abs(targets_binary - binarized_predictions)
-
 
 class EnsembleBCEWithLogitsLoss:
     def __init__(
@@ -202,9 +195,6 @@ class OLDBinaryAccuracy:
         logits = pred[key].squeeze()
         targets_binary = ref[key].squeeze()
 
-        # if 'ensemble_index' in pred:
-        #     assert 'ensemble_index' in ref
-        #     logits, targets_binary = ensemble_predictions(logits, targets_binary, pred['ensemble_index'])
         try:
             binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float().reshape(*targets_binary.shape)
         except:

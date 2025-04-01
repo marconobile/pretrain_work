@@ -13,7 +13,7 @@ print(f"Reading {input_sdf}")
 suppl = rdChem.SDMolSupplier(input_sdf)
 print(f'Number of mols in {len(suppl)}:{input_sdf}')
 
-output_sdf = '/storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/pcqm4m-v2-with_safe_count/pcqm4m_train_safe_HLgap.sdf'
+output_sdf = '/storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/pcqm4m-v2-with_safe_count/pcqm4m_train_safe_HLgap.sdf' # OUTPUT N: 2791546
 writer = Chem.SDWriter(output_sdf)
 
 for idx, mol in enumerate(suppl):
