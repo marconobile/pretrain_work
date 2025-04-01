@@ -107,6 +107,7 @@ def get_rdkit_conformer(mol, num_confs:int=1, max_attempts:int=10, optimize:bool
         conf = mol.GetConformer() # if fails mol needs to be embedded
         return conf if conf != -1 else None
     except:
+        print('Generating 3d...')
         try:
             kwargs = {
                 'useRandomCoords':True, # needs to be T

@@ -13,6 +13,7 @@ except ImportError:
 
 from source.utils.data_utils.featurizer import atom_to_feature_vector, possible_atomic_properties, possible_bond_properties, bond_to_feature_vector, allowable_features
 from collections import defaultdict
+from einops import repeat
 
 
 
@@ -38,7 +39,7 @@ def mols2pyg_list_with_targets(mols, smiles, ys, **mol2pyg_kwargs):
     return pyg_mols
 
 
-def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, nsafe:int|None=None) -> Data:
+def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, **kwargs) -> Data:
     '''
     IMPO: do not trust smiles: given smi -> get MOL -> addHs -> do work. Then for any other place where you need to act on MOL, restart from input smi and repeat smi -> get MOL -> addHs -> do work
     IMPO: this does not set y
@@ -59,11 +60,11 @@ def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, nsafe:int|None=None) -> Dat
         print("Could not get rdkit Conformer obj for molecule")
         return None
 
-    num_atoms = mol.GetNumAtoms() # TODO care when dropping hs
-    rotable_bonds = get_torsions(mol) # TODO care when dropping hs
-    dihedral_angles_degrees = [GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds] # TODO care when dropping hs
+    num_atoms = mol.GetNumAtoms()
+    rotable_bonds = get_torsions(mol)
+    dihedral_angles_degrees = [GetDihedral(conf, rot_bond) for rot_bond in rotable_bonds]
 
-    adj_matrix = np.zeros((num_atoms, num_atoms), dtype=np.uint8) # TODO care when dropping hs
+    adj_matrix = np.zeros((num_atoms, num_atoms), dtype=np.uint8)
     atoms_features = defaultdict(list) # value[idx] -> feat for atom at idx
     pos = []
 
@@ -72,10 +73,10 @@ def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, nsafe:int|None=None) -> Dat
     covalent_bonds = [[bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()] for bond in mol.GetBonds()]
 
     for i, atom in enumerate(mol.GetAtoms()):
-        assert atom.GetIdx() == i # TODO care when dropping hs
+        assert atom.GetIdx() == i
 
         # fill adj matrix
-        for neighbor in atom.GetNeighbors(): # TODO care when dropping hs
+        for neighbor in atom.GetNeighbors():
             neighbor_idx = neighbor.GetIdx()
             adj_matrix[i, neighbor_idx] = 1
             adj_matrix[neighbor_idx, i] = 1
@@ -111,19 +112,29 @@ def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, nsafe:int|None=None) -> Dat
     assert edge_index.shape[-1] ==  num_atoms*(num_atoms-1)
 
     fragmentdsIds_present, count_frags = get_molecule_fragments(mol) # binarized = presence, count = cumulative count
-    int_molecular_properties = {
+    molecular_properties = {
         "h_donors"    : Descriptors.NumHDonors(mol),
         "h_acceptors" : Descriptors.NumHAcceptors(mol),
         "count_frags" : count_frags,
     }
-    if nsafe:
-        int_molecular_properties.update(
-            {"safe_count" : nsafe}
-        )
+
+    # {"safe_count" : int}
+    # {"homo_lumo_gap" : float}
+    for k,v in kwargs.items():
+        molecular_properties[k]=float(v)
+
+    pos=torch.tensor(pos, dtype=torch.float32)
+    if pos.dim() == 2:
+        pos = pos.unsqueeze(0)
+
+    if edge_index.dim() == 2:
+        edge_index = edge_index.unsqueeze(0) # (2, E) -> (1, 2, E)
+        if pos.shape[0]>1:
+            edge_index = repeat(edge_index, 'b e d -> (repeat b) e d', repeat=pos.shape[0]) # 1 edge index for each conf
 
     return Data(
         adj_matrix=torch.tensor(adj_matrix, dtype=torch.short),
-        pos=torch.tensor(pos, dtype=torch.float32),
+        pos=pos,
         rotable_bonds=torch.tensor(rotable_bonds, dtype=torch.short),
         fragmentdsIds_present=torch.tensor(fragmentdsIds_present, dtype=torch.float32), # needed to be float
         dihedral_angles_degrees=torch.tensor(dihedral_angles_degrees, dtype=torch.float32),
@@ -131,5 +142,5 @@ def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, nsafe:int|None=None) -> Dat
         edge_index=edge_index,
         **bonds_features,
         smiles=rdChem.MolToSmiles(mol, canonical=True),
-        **int_molecular_properties,
+        **molecular_properties,
     )
