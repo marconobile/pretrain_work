@@ -36,8 +36,12 @@ if __name__ == "__main__":
     assert not (copy and move), "Only one of --copy or --move can be specified"
 
     # Get list of files in source
-    files = os.listdir(source)
-    # files = [f for f in os.listdir(source) if f.startswith("mol_") and f.endswith(".npz")]
+    def list_files_in_dir(directory):
+        return [entry.name for entry in os.scandir(directory) if entry.is_file()]
+
+    with ProcessPoolExecutor() as executor:
+        files = list(tqdm(executor.map(list_files_in_dir, [source]), desc="Listing files", total=1))[0]
+
     if n == -1:
         n = len(files)
     else:

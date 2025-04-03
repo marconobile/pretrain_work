@@ -422,3 +422,4 @@ dependencies:
   - zstandard=0.23.0=py310ha75aee5_1
   - zstd=1.5.7=hb8e6e7a_2
 prefix: /home/angiod@usi.ch/anaconda3/envs/safe
+# conda env create -f environment.yml

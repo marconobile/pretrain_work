@@ -1,9 +1,11 @@
 """ Adapted from https://github.com/mir-group/nequip
 """
-import torch.nn
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_mean # scatter
-from torcheval.metrics import BinaryAccuracy as TorchBinaryAccuracy
+from torcheval.metrics import BinaryAccuracy as TorchBinaryAccuracy, BinaryAUROC
+from torchmetrics.classification import BinaryHingeLoss
 
 
 def ensemble_predictions_and_targets(predictions, targets, ensemble_indices):
@@ -107,7 +109,7 @@ class BinaryAccuracy:
             setattr(self, key, value)
 
         self.func_name = "BinaryAccuracy"
-        # self.treshold_for_positivity = .5
+        self.treshold_for_positivity = .5
         self.metric = TorchBinaryAccuracy()
 
     def __call__(
@@ -124,10 +126,11 @@ class BinaryAccuracy:
         logits = pred[key].squeeze()
         targets_binary = ref[key].squeeze()
 
-        predicted_label = logits.softmax(-1).argmax(-1)
+        predicted_label = (logits.sigmoid()>self.treshold_for_positivity ).float()
         if targets_binary.dim() == 0: # if bs = 1
             targets_binary = targets_binary.unsqueeze(0)
             predicted_label = predicted_label.unsqueeze(0)
+
         self.metric.update(predicted_label, targets_binary)
         acc = self.metric.compute()
         self.metric.reset() # reset at each batch
@@ -200,3 +203,109 @@ class OLDBinaryAccuracy:
         except:
             binarized_predictions = (logits.sigmoid()<self.treshold_for_positivity).float()
         return torch.abs(targets_binary - binarized_predictions)
+
+
+class BinaryAUROCMetric:
+    def __init__(
+        self,
+        func_name: str='BinaryAUROC',
+        params: dict = {},
+        **kwargs,
+    ):
+        self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+        self.func_name = "BinaryAUROC"
+        self.treshold_for_positivity = .5
+        self.metric = BinaryAUROC()
+
+    def __call__(
+        self,
+        pred: dict,
+        ref: dict,
+        key: str,
+        mean: bool = True,
+        **kwargs,
+    ):
+        if mean:
+            raise(f"{__class__.__name__} cannot be used as loss function for training")
+
+        logits = pred[key].squeeze()
+        targets_binary = ref[key].squeeze()
+
+        if targets_binary.dim() == 0: # if bs = 1
+            targets_binary = targets_binary.unsqueeze(0)
+            logits = logits.unsqueeze(0)
+
+        self.metric.update(logits, targets_binary)
+        rocauc = self.metric.compute()
+        self.metric.reset() # reset at each batch
+        return rocauc.to(logits.device)
+
+
+class RMSELoss:
+    def __init__(
+        self,
+        func_name: str='RMSE',
+        params: dict = {},
+        **kwargs,
+    ):
+        self.func_name = 'RMSE'
+        self.params = params
+        self.mse = nn.MSELoss()
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    def __call__(
+        self,
+        pred: dict,
+        ref: dict,
+        key: str,
+        mean: bool = True,
+        **kwargs,
+    ):
+        preds = pred[key]
+        targets = ref[key]
+        loss = torch.sqrt(self.mse(targets, preds))
+        if mean: return torch.mean(loss)
+        return loss
+
+
+
+class HingeBinaryLoss:
+    def __init__(
+        self,
+        func_name: str='Hinge',
+        params: dict = {},
+        **kwargs,
+    ):
+        self.func_name = 'Hinge'
+        self.params = params
+        self.bhl = BinaryHingeLoss(squared=True)
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    def __call__(
+        self,
+        pred: dict,
+        ref: dict,
+        key: str,
+        mean: bool = True,
+        **kwargs,
+    ):
+        '''
+        Example from BinaryHingeLoss source code:
+        # preds = torch.tensor([0.25, 0.25, 0.55, 0.75, 0.75])
+        # target = torch.tensor([0, 0, 1, 1, 1])
+        # bhl = BinaryHingeLoss()
+        # print(bhl(preds, target), bhl(preds, target) == torch.tensor(0.6900))
+        # bhl = BinaryHingeLoss(squared=True)
+        # print(bhl(preds, target),torch.tensor(0.6905))
+        '''
+        preds = pred[key].squeeze()
+        targets = ref[key].squeeze()
+        self.bhl.to(preds.device)
+        loss = self.bhl(preds, targets)
+        if mean: return torch.mean(loss)
+        return loss
