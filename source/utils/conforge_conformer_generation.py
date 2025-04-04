@@ -139,7 +139,8 @@ def set_conformer_in_pyg_mol(conformers, _pyg_mol, frad_fill_target:int=-1):
 
     batched_pos = torch.stack(batched_pos)
     og_pyg_mol.pos = batched_pos
-    og_pyg_mol.edge_index = og_pyg_mol.edge_index.unsqueeze(0) # (2, E) -> (1, 2, E)
+    if og_pyg_mol.edge_index.dim() == 2:
+        og_pyg_mol.edge_index = og_pyg_mol.edge_index.unsqueeze(0) # (2, E) -> (1, 2, E)
     og_pyg_mol.edge_index = repeat(og_pyg_mol.edge_index, 'b e d -> (repeat b) e d', repeat=batched_pos.shape[0]) # 1 edge index for each conf
     return og_pyg_mol
 

@@ -47,7 +47,8 @@ def mol2pyg(mol:rdChem.Mol, use_rdkit_3d:bool=False, **kwargs) -> Data:
         pyg data obj or None if some operations are not possible
     '''
     if mol is None:
-        raise ValueError("Molecule is none")
+        print("Molecule is none")
+        return mol
 
     mol = rdChem.RemoveHs(mol)
     # assert all(atom.GetAtomicNum() != 1 for atom in mol.GetAtoms()), "Molecule contains hydrogen atoms"

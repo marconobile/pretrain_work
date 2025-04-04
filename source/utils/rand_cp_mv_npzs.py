@@ -19,7 +19,7 @@ parser_entries = [
     {'identifiers': ["-dest", '--dest'],'type': str, 'help': 'Destination path'},
     {'identifiers': ["-n", '--n'], 'type': int,'help': 'How many files to move/copy', 'optional': True, 'default': -1},
     {'identifiers': ["-s", '--seed'], 'type': int,'help': 'seed', 'default': 42},
-    {'identifiers': ["-p", '--processes'], 'type': int,'help': 'num processes', 'default': 10},
+    {'identifiers': ["-p", '--processes'], 'type': int,'help': 'num processes', 'default': 24},
 ]
 
 # example:

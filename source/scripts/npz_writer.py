@@ -8,13 +8,13 @@ from source.utils.npz_utils import get_field_from_npzs
 ####################################################
 
 # INPUT
-path:str = '/home/nobilm@usi.ch/pretrain_paper/data/moelculenet/SAFEbace.csv'
-out = parse_csv(path, [0,2,3]) # bace: [0,2]
-smiles = out['smiles'] # bace: mol
-ys = out['ys'] # bace: Class
-safe_counts = out['num_of_chunks_in_mol'] # bace: Class
+path:str = '/home/nobilm@usi.ch/pretrain_paper/data/moelculenet/SAFEesol.csv' #SAFEbace.csv'
+out = parse_csv(path, [0,2,3]) # after SAFE this is fixed
+smiles = out['smiles'] # after SAFE this is fixed
+ys = out['ys'] # after SAFE this is fixed
+safe_counts = out['num_of_chunks_in_mol'] # after SAFE this is fixed
 assert len(smiles) == len(ys) == len(safe_counts)
-save_dir:str = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/bace_with_safe'
+save_dir:str = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/esol_with_safe' # no need to create this, it gets created
 
 # PARAMS
 scaffold_splitting:bool = True # add option for label-based splitting
