@@ -1,12 +1,12 @@
 root: /storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/experiments
-run_name: pretrain_run_test
+run_name: pretrain_run_500k
 wandb_project: finetune
 seed: 7
 dataset_seed: 15
-device: cpu #cuda:1
+device: cuda:0
 mixed_precision: false
 
-use_grokfast: true
+# use_grokfast: true
 # use_ema: true
 
 model_builders:
@@ -215,13 +215,13 @@ head_fragmentdsIds_present_wd: true
 # dataset_mode: ensemble
 dataset_list:
   - dataset: npz
-    dataset_input: /storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/single_batch
+    dataset_input: /storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/train500k # /storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/single_batch #
     # inmemory: false
     transforms: [source.data_transforms._frad_transforms.frad, geqtrain.train.transforms.edges_dropout] # callables that returns a pyg.Data obj, order provided matters
     key_mapping:
-      coords: pos
+      coords: pos # blue is the npz kword, red is the kword in code
       atomic_num: node_types
-      graph_labels: homo_lumo_gap
+    #   graph_labels: homo_lumo_gap
       hybridization: hybridization
       chirality: chirality
       is_aromatic: is_aromatic
@@ -247,13 +247,13 @@ dataset_list:
 
 validation_dataset_list:
   - validation_dataset: npz
-    validation_dataset_input: /storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/single_batch
+    validation_dataset_input: /storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/val10k # /storage_common/nobilm/pretrain_paper/PCQM4Mv2Dataset/single_batch #
     # inmemory: false
     transforms: [source.data_transforms._frad_transforms.no_noise]
     key_mapping:
       coords: pos
-      atomic_num: node_types # blue is the npz kword, red is the kword in code
-      graph_labels: homo_lumo_gap
+      atomic_num: node_types
+    #   graph_labels: homo_lumo_gap
       hybridization: hybridization
       chirality: chirality
       is_aromatic: is_aromatic
@@ -469,16 +469,16 @@ metrics_components:
       - CrossEntropyLoss
 
 # --- T R A I N I N G --- #
-accumulation_steps: 4
+accumulation_steps: 2
 batch_size: 64
 validation_batch_size: 128
-dataset_num_workers: 2 #20
-train_dloader_n_workers: 2
-val_dloader_n_workers: 2
+dataset_num_workers: 32
+train_dloader_n_workers: 32
+val_dloader_n_workers: 8
 
 max_epochs: 500
-learning_rate: 2.e-5
-metrics_key: validation_homo_lumo_gap_L1Loss_mean
+learning_rate: 4.e-5
+# metrics_key: validation_homo_lumo_gap_L1Loss_mean
 # metric_criteria: increasing
 
 # learning rate scheduler
@@ -495,7 +495,6 @@ lr_scheduler_name: CosineAnnealingLR
 
 early_stopping_patiences:
   validation_loss: 10
-
 
 ###################
 default_dtype: float32
@@ -562,7 +561,7 @@ wandb: true
 wandb_watch: true # - log gradients and/or parameters of the model - #
 code_folder_name: source # - use if you run geqtrain from a different repo, to save source code of your repo - #
 wandb_watch_kwargs:
-    log: 'gradients' # 'gradients', 'parameters', 'all', comment whole wandb_watch_kwargs to do not log any of previous
+    # log: 'gradients' # 'gradients', 'parameters', 'all', comment whole wandb_watch_kwargs to do not log any of previous
     log_freq: 1000  # upload log every N batches
 
 # optimizer
