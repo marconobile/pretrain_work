@@ -253,7 +253,7 @@ class RMSELoss:
     ):
         self.func_name = 'RMSE'
         self.params = params
-        self.mse = nn.MSELoss()
+        self.mse = nn.MSELoss() # reduction is by default mean
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -270,7 +270,6 @@ class RMSELoss:
         loss = torch.sqrt(self.mse(targets, preds))
         if mean: return torch.mean(loss)
         return loss
-
 
 
 class HingeBinaryLoss:
@@ -309,3 +308,99 @@ class HingeBinaryLoss:
         loss = self.bhl(preds, targets)
         if mean: return torch.mean(loss)
         return loss
+
+
+class RegressionEnsemble:
+    def __init__(
+        self,
+        func_name: str,
+        params: dict = {},
+        **kwargs,
+    ):
+        self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        for key, value in params.items():
+            setattr(self, key, value)
+
+        self.rms = False
+        self.func_name = 'RegressionEnsemble' # needs to be equal to class name
+        if self.aggregation == 'EnsembleMSE' or 'EnsembleRMSE':
+            self.loss_func = nn.MSELoss()
+            if self.aggregation == 'EnsembleRMSE':
+                self.rms = True
+        elif self.aggregation == 'EnsembleL1':
+            self.loss_func = nn.L1Loss()
+        else:
+            raise ValueError(f"func_name: {self.aggregation} not valid, it must be in EnsembleMSE or EnsembleL1")
+
+        self.func_name = "func_name"
+
+    def __call__(
+        self,
+        pred: dict,
+        ref: dict,
+        key: str,
+        mean: bool = True,
+        **kwargs,
+    ):
+        predictions = pred[key].squeeze()
+        targets = ref[key].squeeze()
+        assert 'ensemble_index' in pred
+        assert 'ensemble_index' in ref
+        ensembled_predictions, ensembled_targets = ensemble_predictions_and_targets(predictions, targets, pred['ensemble_index'])
+
+        loss = self.loss_func(
+            ensembled_predictions,
+            ensembled_targets,
+        )
+        if mean:
+            loss = loss.mean()
+
+        return torch.sqrt(loss) if self.rms else loss
+
+
+
+class EnsembleBinaryAUROCMetric:
+    def __init__(
+        self,
+        func_name: str='EnsembleBinaryAUROCMetric',
+        params: dict = {},
+        **kwargs,
+    ):
+        self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+        self.func_name = "EnsembleBinaryAUROCMetric"
+        self.treshold_for_positivity = .5
+        self.metric = BinaryAUROC()
+
+    def __call__(
+        self,
+        pred: dict,
+        ref: dict,
+        key: str,
+        mean: bool = True,
+        **kwargs,
+    ):
+        if mean:
+            raise(f"{__class__.__name__} cannot be used as loss function for training")
+
+        logits = pred[key].squeeze()
+        targets_binary = ref[key].squeeze()
+
+        logits = pred[key].squeeze()
+        targets_binary = ref[key].squeeze()
+        assert 'ensemble_index' in pred
+        assert 'ensemble_index' in ref
+        logits, targets_binary = ensemble_predictions_and_targets(logits, targets_binary, pred['ensemble_index'])
+
+        if targets_binary.dim() == 0: # if bs = 1
+            targets_binary = targets_binary.unsqueeze(0)
+            logits = logits.unsqueeze(0)
+
+        self.metric.update(logits, targets_binary)
+        rocauc = self.metric.compute()
+        self.metric.reset() # reset at each batch
+        return rocauc.to(logits.device)

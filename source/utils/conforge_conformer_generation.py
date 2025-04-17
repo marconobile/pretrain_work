@@ -23,17 +23,19 @@ def smi2npz(
     smi_list:list,
     generate_confs:bool=True,
     ys:list|None=None,
-    split:bool=True,
-    minRMSD:float=1.5,
+    split:bool=True, # applies scaffold splitting
+    minRMSD:float=1.5, # minimum rmsd required between confs
     n_confs_to_keep:int=1,
-    n_confs_to_generate:int=10,
-    write:bool=True,
-    filter_via_dihedral_fingerprint:bool=False,
-    safe_counts:list|None=None,
-    fill_with_frad:bool=True,
+    n_confs_to_generate:int=10, # among these n_confs_to_keep are selected and saved
+    write:bool=True, # wheter to save in save_dir or not
+    filter_via_dihedral_fingerprint:bool=False, # wheter to filter or not n_confs_to_keep using dihedral_fingerprint
+    safe_counts:list|None=None, # the list of ints, one for each smi
+    fill_with_frad:bool=True, # wheter to fill or not the npz with n_confs_to_keep via frad
 ) -> None:
-
-    '''given a smile, save associated npz in save_dir'''
+    '''
+    given a smile, save associated npz in save_dir
+    if conf gen fails, rdkit 3d embedder is used as fallback
+    '''
 
     if os.path.exists(save_dir):
         raise FileExistsError(f"The directory '{save_dir}' already exists. Please provide a different directory or remove the existing one.")
@@ -81,17 +83,19 @@ def smi2npz(
             pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol, fill_with_frad) # set pos of all confs
 
         else:
-            pyg_mol = smi2pyg_mol_rdkit3d(smi, nsafe=nsafe, nconfs=n_confs_to_keep)
-            if pyg_mol is None:
-                n_mols_skipped +=1
-                continue
+            # TODO fix the below with set_conformer_in_pyg_mol by featching conformers from rdkt.Conf obj
+            continue
+            # pyg_mol = smi2pyg_mol_rdkit3d(smi, nsafe=nsafe, nconfs=n_confs_to_keep)
+            # if pyg_mol is None:
+            #     n_mols_skipped +=1
+            #     continue
 
         if ys_provided:
             pyg_mol.y = np.array(y, dtype=np.float32)
         pyg_mols_to_save.append(pyg_mol)
 
     print(f'number of mols skipped: {n_mols_skipped}')
-    print(f"Final number of smiles {len(pyg_mols_to_save)}")
+    print(f"Final number of smiles {len(pyg_mols_to_save)}") 
     if write:
         save_npz(pyg_mols_to_save, folder_name=save_dir, split=split)
     return pyg_mols_to_save, n_mols_skipped

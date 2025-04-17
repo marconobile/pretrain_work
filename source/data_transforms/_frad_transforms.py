@@ -93,7 +93,7 @@ def set_dihedral_angle_(coords, j, k, current_angle_deg, desired_angle_deg, adja
     rotate_around_bond(coords, j, k, angle_diff_rad, downstream_atoms)
 
 # https://openkim.org/files/MO_959249795837_003/LennardJones612_UniversalShifted.params : 2**(1/6) * 0.5523570 = 0.62
-def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0, min_interatomic_dist_required: float = 0.8):
+def apply_dihedral_noise_(data:AtomicData, dihedral_scale: float = 20.0): #0.0, min_interatomic_dist_required: float = 0.8):
     '''
     dihedral_scale: std of norm dist from which to sample the noise to add at torsional angles
     ! here pos has shape: torch.Size([N, 3]), it has already been indexed across the possible frames/conformers

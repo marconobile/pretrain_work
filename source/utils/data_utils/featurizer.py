@@ -107,7 +107,7 @@ def atom_to_feature_vector(atom):
     atom_feature = {
             GROUP: periodic_table_group(atom),
             PERIOD: periodic_table_period(atom),
-            ATOMIC_NUM: safe_index(allowable_features['possible_atomic_num_list'], atom.GetAtomicNum()),
+            ATOMIC_NUM: safe_index(allowable_features['possible_atomic_num_list'], atom.GetAtomicNum())+1, # +1 since if u try to rever mol via rdkit with this index atom number is shifted by 1 down, +1 fixes this
             CHIRALITY: safe_index(allowable_features['possible_chirality_list'], str(atom.GetChiralTag())), # https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html#rdkit.Chem.rdchem.ChiralType
             DEGREE: safe_index(allowable_features['possible_degree_list'], atom.GetTotalDegree()), # num of covalent bonds
             FORMAL_CHARGE: safe_index(allowable_features['possible_formal_charge_list'], atom.GetFormalCharge()),
