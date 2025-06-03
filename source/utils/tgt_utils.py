@@ -66,6 +66,7 @@ class DiscreteDistLoss:
             **kwargs,
         ):
         '''
+        Discretize atomic distances into bins and compute cross-entropy loss.
         num_bins: Number of discrete bins to categorize distances (default=512 as in https://github.com/shamim-hussain/tgt/tree/master/configs/pcqm)
         rmax: The maximum distance range in Ångströms (default=8 Å from same source above)
         '''

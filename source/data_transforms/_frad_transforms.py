@@ -122,6 +122,10 @@ def apply_coords_noise_(data:AtomicData, coords_noise_scale:float):
     data.pos += data.noise_target
 
 
+def frad_without_noise(data:AtomicData, add_coords_noise: bool = False, coords_noise_scale:float=0.04):
+    return frad(data, add_coords_noise)
+
+
 def frad(data:AtomicData, add_coords_noise: bool = True, coords_noise_scale:float=0.04):
     # the idea is that coords_noise_scale is LOW
     data = deepcopy(data) #! in-place op to the data obj persist thru dloader iterations

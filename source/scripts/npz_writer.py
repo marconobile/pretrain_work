@@ -8,20 +8,30 @@ from source.utils.npz_utils import get_field_from_npzs
 ####################################################
 
 # INPUT
-path:str = '/home/nobilm@usi.ch/pretrain_paper/data/moelculenet/SAFEbbbp.csv' #SAFEesol.csv' #SAFEbace.csv'
-save_dir:str = '/storage_common/nobilm/pretrain_paper/guacamol/EXPERIMENTS/bbbp' # no need to create this, it gets created
+path:str = '/home/nobilm@usi.ch/pretrain_paper/data/moelculenet/SAFEbace.csv'
+save_dir:str = '/scratch/nobilm/SAFEbace_rdkit_with_fg_corrected'
 
 # Input processing, after SAFE this is fixed
 out = parse_csv(path, [0,2,3]) # after SAFE this is fixed
+# out = parse_csv(path, [0, -1])
+
+
 smiles = out['smiles'] # after SAFE this is fixed
-ys = out['ys'] # after SAFE this is fixed
 safe_counts = out['num_of_chunks_in_mol'] # after SAFE this is fixed
-assert len(smiles) == len(ys) == len(safe_counts)
+
+ys = None
+if 'ys' in out:
+    ys = out['ys'] # after SAFE this is fixed
+    assert len(smiles) == len(ys) == len(safe_counts)
+
+#! FOR TESTING
+# smiles = smiles[:16]
+
 
 # PARAMS
 use_scaffold_splitting:bool = True # add option for label-based splitting
 n_confs_to_keep:int=1
-n_confs_to_generate:int=200
+n_confs_to_generate:int=100
 minRMSD:float=1.5
 filter_via_dihedral_fingerprint:bool=False
 fill_with_frad:bool=False #True, # wheter to fill or not the npz with n_confs_to_keep via frad

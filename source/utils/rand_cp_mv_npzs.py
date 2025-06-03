@@ -16,7 +16,7 @@ parser_entries = [
     {'identifiers': ["-c", "--copy"], 'type': bool, 'optional': True},
     {'identifiers': ["-m", "--move"], 'type': bool, 'optional': True},
     {'identifiers': ["-source", '--source'],'type': str, 'help': 'Source path'},
-    {'identifiers': ["-dest", '--dest'],'type': str, 'help': 'Destination path'},
+    {'identifiers': ["-dest", '--dest'],'type': str, 'help': 'Destination path, if not existing it gets created'},
     {'identifiers': ["-n", '--n'], 'type': int,'help': 'How many files to move/copy', 'optional': True, 'default': -1},
     {'identifiers': ["-s", '--seed'], 'type': int,'help': 'seed', 'default': 42},
     {'identifiers': ["-p", '--processes'], 'type': int,'help': 'num processes', 'default': 24},
@@ -24,6 +24,31 @@ parser_entries = [
 
 # example:
 # python source/utils/rand_cp_mv_npzs.py -c True -source /storage_common/nobilm/pretrain_paper/guacamol/kek_err -d /storage_common/nobilm/pretrain_paper/guacamol/testing_guac -n 50
+
+def handle_destination_folder(dest):
+    # Check if destination folder exists
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+        print(f"Destination folder '{dest}' created.")
+    else:
+        print(f"Destination folder '{dest}' already exists.")
+        user_input = input("Choose an option:\n"
+                            "1) Use it as it is\n"
+                            "2) Delete it and recreate it empty\n"
+                            "3) Abort\n"
+                            "Enter your choice (1/2/3): ").strip()
+        if user_input == '1':
+            print("Using the existing folder as it is.")
+        elif user_input == '2':
+            print(f"Deleting and recreating folder '{dest}'.")
+            shutil.rmtree(dest)
+            os.makedirs(dest)
+        elif user_input == '3':
+            print("Operation aborted.")
+            exit(0)
+        else:
+            print("Invalid choice. Operation aborted.")
+            exit(1)
 
 if __name__ == "__main__":
     args = MyArgPrsr(parser_entries)
@@ -34,6 +59,8 @@ if __name__ == "__main__":
 
     assert copy or move, "Either --copy or --move must be specified"
     assert not (copy and move), "Only one of --copy or --move can be specified"
+
+    handle_destination_folder(dest)
 
     # Get list of files in source
     def list_files_in_dir(directory):

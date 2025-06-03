@@ -47,15 +47,15 @@ def get_molecule_fragments(mol:rdChem.Mol):
     return binarizedFragmentsIds, num_of_frags
 
 
-def pyg2mol(pyg, removeHs:bool):
+def pyg2mol(pyg, removeHs:bool, confId:int=0):
     mol = rdChem.MolFromSmiles(pyg.smiles, smi_reader_params(removeHs))
     if removeHs:
         mol = rdChem.RemoveHs(mol)
     else:
         mol = rdChem.AddHs(mol)
 
-    if pyg.pos[0].shape[0] != 1:
-        out = set_coords(mol, pyg.pos[0])
+    if pyg.pos[confId].shape[0] != 1:
+        out = set_coords(mol, pyg.pos[confId])
     else:
         out = set_coords(mol, pyg.pos)
 
@@ -105,6 +105,8 @@ def get_rdkit_conformer(mol, num_confs:int=1, max_attempts:int=10, optimize:bool
     # TODO: create multithread version of this via https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMultipleConfs
     try:
         conf = mol.GetConformer() # if fails mol needs to be embedded
+        if len([x.GetId() for x in mol.GetConformers()]) != num_confs:
+            assert False # if not enough conformers then regenerated
         return conf if conf != -1 else None
     except:
         print('Generating 3d...')
@@ -132,7 +134,10 @@ def get_rdkit_conformer(mol, num_confs:int=1, max_attempts:int=10, optimize:bool
                 if conf != -1:
                     if optimize and num_confs>1:
                         for conf_id in out:
-                            AllChem.UFFOptimizeMolecule(mol, confId=conf_id)
+                            out = 0
+                            # while out == 0:
+                            #     out = AllChem.UFFOptimizeMolecule(mol, confId=conf_id)
+                        AllChem.UFFOptimizeMoleculeConfs(mol, numThreads=10)
                     return conf
                 return None
         except:
@@ -271,12 +276,12 @@ def visualize_3d_mols(mols,
     nrows = grid[0]
     ncols = grid[1]
 
-
     for row_idx in range(nrows):
         for col_idx in range(ncols):
             mol_idx = row_idx * ncols + col_idx
             p.removeAllModels(viewer=(row_idx, col_idx))
-            p.addModel(rdChem.MolToMolBlock(mols[mol_idx], confId=0), 'sdf', viewer=(row_idx, col_idx))
+            # p.addModel(rdChem.MolToMolBlock(mols[mol_idx], confId=0), 'sdf', viewer=(row_idx, col_idx))
+            p.addModel(rdChem.MolToMolBlock(mols[mol_idx]), 'sdf', viewer=(row_idx, col_idx))
             p.setStyle({drawing_style: {}},  viewer=(row_idx, col_idx))
             if titles[mol_idx]: p.addLabel(titles[mol_idx],  viewer=(row_idx, col_idx)) # , {'position': {'x': 0, 'y': 1.5, 'z': 0}, 'backgroundColor': 'white', 'fontSize': 16}
     p.zoomTo()

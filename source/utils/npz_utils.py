@@ -10,7 +10,7 @@ from numpy.lib.npyio import NpzFile
 import torch
 from source.utils.data_utils.featurizer import possible_bond_properties
 from scipy.spatial.distance import pdist
-
+from tqdm import tqdm
 
 def get_field_from_npzs(path:str, field:Union[str, List]='*') -> List[NpzFile]:
   '''
@@ -115,7 +115,7 @@ def save_npz(pyg_mols, split:bool=True, folder_name:str=None, N:int=None, idx:in
     if N:
         pyg_mols = pyg_mols[:N]
 
-    for pyg_m in pyg_mols:
+    for pyg_m in tqdm(pyg_mols, desc="Saving molecules"):
         _save_pyg_as_npz(pyg_m, f'{all_dir}/mol_{idx}')
         idx +=1
 

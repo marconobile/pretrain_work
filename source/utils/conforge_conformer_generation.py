@@ -11,12 +11,13 @@ from tqdm import tqdm
 from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*')
 import warnings
+from source.scripts.fg_featurizer import FGFeaturizer
 
-def smi2pyg_mol_rdkit3d(smi:str, nsafe=None, nconfs:int=1):
+def smi2pyg_mol_rdkit3d(smi:str, fg_featurizer, nsafe=None, nconfs:int=1):
     mol = rdChem.MolFromSmiles(smi)
     mol = preprocess_mol(mol, addHs=False)
     conf = get_rdkit_conformer(mol, num_confs=nconfs)
-    return mol2pyg(mol, use_rdkit_3d=True, nsafe=nsafe)
+    return mol2pyg(mol, use_rdkit_3d=True, nsafe=nsafe, fg_featurizer=fg_featurizer)
 
 def smi2npz(
     save_dir:str,
@@ -59,22 +60,32 @@ def smi2npz(
     pyg_mols_to_save = []
     n_mols_skipped = 0
     print(f"Initial number of smiles {len(smi_list)}")
-    for smi, y, nsafe in tqdm(zip(smi_list, ys, safe_counts), total=len(smi_list), desc="Processing SMILES"):
-        smi = drop_disconnected_components(smi)
-        if generate_confs:
-            conformers = generate_conformers(smi,
-                                             conforge_settings,
-                                             n_confs_to_keep,
-                                             filter_via_dihedral_fingerprint=filter_via_dihedral_fingerprint)
 
-            if not conformers:
-                warnings.warn("Could not generate confs for smi: {smi}, falling back to rdkit")
-                pyg_mol = smi2pyg_mol_rdkit3d(smi, nsafe=nsafe, nconfs=n_confs_to_keep)
+    fg_featurizer = FGFeaturizer()
+
+    for smi, y, nsafe in tqdm(zip(smi_list, ys, safe_counts), total=len(smi_list), desc="Processing SMILES"):
+        try:
+            smi = drop_disconnected_components(smi)
+            if generate_confs:
+                conformers = generate_conformers(smi,
+                                                conforge_settings,
+                                                n_confs_to_keep,
+                                                filter_via_dihedral_fingerprint=filter_via_dihedral_fingerprint)
+
+                if not conformers:
+                    warnings.warn("Could not generate confs for smi: {smi}, falling back to rdkit")
+                    pyg_mol = smi2pyg_mol_rdkit3d(smi, fg_featurizer=fg_featurizer, nsafe=nsafe, nconfs=n_confs_to_keep)
+                    if pyg_mol is None:
+                        n_mols_skipped +=1
+                    continue
+
+            else:
+                pyg_mol = smi2pyg_mol_rdkit3d(smi, fg_featurizer=fg_featurizer, nsafe=nsafe, nconfs=n_confs_to_keep)
                 if pyg_mol is None:
                     n_mols_skipped +=1
-                continue
-
-            pyg_mol = mol2pyg(conformers[0], nsafe=nsafe) # set all non-pos-related fields
+                    continue
+            #! this will break as soon as the above else will be executed since conformers is not defined, fix it
+            pyg_mol = mol2pyg(conformers[0], nsafe=nsafe, fg_featurizer=fg_featurizer) # set all non-pos-related fields
 
             if pyg_mol is None:
                 n_mols_skipped +=1
@@ -82,20 +93,15 @@ def smi2npz(
 
             pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol, fill_with_frad) # set pos of all confs
 
-        else:
-            # TODO fix the below with set_conformer_in_pyg_mol by featching conformers from rdkt.Conf obj
+            if ys_provided:
+                pyg_mol.y = np.array(y, dtype=np.float32)
+            pyg_mols_to_save.append(pyg_mol)
+        except:
+            n_mols_skipped +=1
+            warnings.warn("Could not generate confs for smi: {smi}, falling back to rdkit")
             continue
-            # pyg_mol = smi2pyg_mol_rdkit3d(smi, nsafe=nsafe, nconfs=n_confs_to_keep)
-            # if pyg_mol is None:
-            #     n_mols_skipped +=1
-            #     continue
-
-        if ys_provided:
-            pyg_mol.y = np.array(y, dtype=np.float32)
-        pyg_mols_to_save.append(pyg_mol)
 
     print(f'number of mols skipped: {n_mols_skipped}')
-    print(f"Final number of smiles {len(pyg_mols_to_save)}") 
     if write:
         save_npz(pyg_mols_to_save, folder_name=save_dir, split=split)
     return pyg_mols_to_save, n_mols_skipped
