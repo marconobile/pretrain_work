@@ -3,7 +3,7 @@ import numpy as np
 
 class FGFeaturizer:
     def __init__(self):
-        with open('/home/nobilm@usi.ch/pretrain_paper/fg.txt', "r") as f:
+        with open('/home/nobilm@usi.ch/pretrain_paper/source/scripts/fg.txt', "r") as f:
             self.funcgroups = f.read().strip().split('\n')
             self.name = [i.split()[0] for i in self.funcgroups]
             self.smarts = [Chem.MolFromSmarts(i.split()[1]) for i in self.funcgroups]
