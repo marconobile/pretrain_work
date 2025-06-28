@@ -239,8 +239,6 @@ def mol2pyg(mol:rdChem.Mol, fg_featurizer:FGFeaturizer, **kwargs) -> Data:
             edge_index = repeat(edge_index, 'b e d -> (repeat b) e d', repeat=pos.shape[0]) # 1 edge index for each conf
 
     fg_ids=torch.tensor(np.array(fg_ids), dtype=torch.float32).unsqueeze(0)
-    if fg_ids.shape[1] != num_atoms:
-        print('here')
 
     return Data(
         adj_matrix=torch.tensor(adj_matrix, dtype=torch.short),

@@ -404,3 +404,76 @@ class EnsembleBinaryAUROCMetric:
         rocauc = self.metric.compute()
         self.metric.reset() # reset at each batch
         return rocauc.to(logits.device)
+
+
+
+
+class EnforceGraphEmbOrthogonalityLoss:
+    def __init__(
+        self,
+        func_name: str,
+        params: dict = {},
+        **kwargs,
+    ):
+        """
+        Diversity regularizer based on normalized cosine-distance:
+        encourages embeddings in the same group to point in different directions.
+
+        Args:
+            eps: small constant to avoid numerical issues.
+        """
+        self.eps: float = 1e-6
+        self.params = params
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        self.func_name = "EnforceGraphEmbOrthogonalityLoss"
+
+    def __call__(
+        self,
+        pred: dict,
+        ref: dict,
+        key: str,
+        mean: bool = True,
+        **kwargs,
+    ):
+        """
+        Args:
+            A: Tensor of shape (N, K) – your embeddings.
+            B: LongTensor of shape (N,) – integer group IDs for each row of A.
+        Returns:
+            loss: scalar; negative average pairwise cosine-distance across groups.
+        """
+        A = pred["graph_features"]
+        B = pred["ensemble_index"]
+        device = A.device
+        unique_groups = B.unique()
+        group_losses = []
+
+        for g in unique_groups:
+            idx = (B == g).nonzero(as_tuple=True)[0]
+            M = idx.numel()
+            if M <= 1:
+                continue
+
+            X = A[idx]                     # (M, K)
+            # Normalize to unit length
+            X_norm = F.normalize(X, p=2, dim=1, eps=self.eps)  # (M, K)
+
+            # Compute pairwise cosine similarities: (M, M)
+            sims = X_norm @ X_norm.t()     # cos(x_i, x_j)
+            # Clip for numerical stability
+            sims = sims.clamp(-1 + self.eps, 1 - self.eps)
+
+            # Mask out self-similarities on the diagonal
+            mask = ~torch.eye(M, dtype=torch.bool, device=device)
+            pairwise_sims = sims[mask].view(M, M - 1)
+
+            # Convert to distance: 1 - cos_sim
+            pairwise_dist = 1.0 - pairwise_sims
+            group_losses.append(pairwise_dist.mean())
+
+        if not group_losses:
+            return torch.tensor(0., device=device)
+
+        # Negative because we *maximize* diversity (distance)
+        return -torch.stack(group_losses).mean()
