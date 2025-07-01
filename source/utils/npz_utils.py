@@ -123,6 +123,7 @@ def save_npz(pyg_mols, split:bool=True, folder_name:str=None, N:int=None, idx:in
 
 
 def get_smiles_and_filepaths_from_valid_npz(npz_dir:str|Path) -> Tuple[str, Path]:
+    #! ensemble indipendent, i.e. all confs are in the same npz
     smiles, filepaths = [], []
     for npz_file in ls(npz_dir):
         if not test_npz_validity(npz_file):

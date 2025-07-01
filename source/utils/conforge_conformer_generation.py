@@ -16,7 +16,6 @@ from source.scripts.fg_featurizer import FGFeaturizer
 def smi2pyg_mol_rdkit3d(smi:str, fg_featurizer, nsafe=None, nconfs:int=1):
     mol = rdChem.MolFromSmiles(smi)
     mol = preprocess_mol(mol, addHs=False)
-    conf = get_rdkit_conformer(mol, num_confs=nconfs)
     return mol2pyg(mol, use_rdkit_3d=True, nsafe=nsafe, fg_featurizer=fg_featurizer)
 
 def smi2npz(
@@ -38,72 +37,47 @@ def smi2npz(
     if conf gen fails, rdkit 3d embedder is used as fallback
     '''
 
-    if os.path.exists(save_dir):
-        raise FileExistsError(f"The directory '{save_dir}' already exists. Please provide a different directory or remove the existing one.")
-
-    if not generate_confs:
-        warnings.warn("Better to use generate_confs=True")
+    if os.path.exists(save_dir): raise FileExistsError(f"The directory '{save_dir}' already exists. Please provide a different directory or remove the existing one.")
+    if not generate_confs: raise ValueError("Better to use generate_confs=True")
 
     # handle the case of no targets
     ys_provided = ys is not None
-    if ys is None:
-        ys = [None] * len(smi_list)
+    if ys is None: ys = [None] * len(smi_list)
 
-    if safe_counts is None:
-        safe_counts = [None] * len(smi_list)
+    # handle the case of no safe
+    if safe_counts is None: safe_counts = [None] * len(smi_list)
 
-    conforge_settings = getSettings(minRMSD = minRMSD, max_num_out_confs_to_generate=n_confs_to_generate) if generate_confs else None
-    if fill_with_frad and n_confs_to_keep>1:
-        fill_with_frad=n_confs_to_keep
-    else:
-        fill_with_frad = -1
+    if fill_with_frad and n_confs_to_keep>1: fill_with_frad=n_confs_to_keep
+    else: fill_with_frad = -1
+
     pyg_mols_to_save = []
     n_mols_skipped = 0
     print(f"Initial number of smiles {len(smi_list)}")
-
     fg_featurizer = FGFeaturizer()
-
+    conforge_settings = getSettings(minRMSD = minRMSD, max_num_out_confs_to_generate=n_confs_to_generate) if generate_confs else None
     for smi, y, nsafe in tqdm(zip(smi_list, ys, safe_counts), total=len(smi_list), desc="Processing SMILES"):
         try:
-            smi = drop_disconnected_components(smi)
-            if generate_confs:
-                conformers = generate_conformers(smi,
-                                                conforge_settings,
-                                                n_confs_to_keep,
-                                                filter_via_dihedral_fingerprint=filter_via_dihedral_fingerprint)
+            conformers = generate_conformers(
+                smi=smi,
+                conf_gen=conforge_settings,
+                max_num_out_confs_to_keep=n_confs_to_keep,
+                filter_via_dihedral_fingerprint=filter_via_dihedral_fingerprint, #! this is not used
+                removeHs=False,
+            )
 
-                if not conformers:
-                    warnings.warn("Could not generate confs for smi: {smi}, falling back to rdkit")
-                    pyg_mol = smi2pyg_mol_rdkit3d(smi, fg_featurizer=fg_featurizer, nsafe=nsafe, nconfs=n_confs_to_keep)
-                    if pyg_mol is None:
-                        n_mols_skipped +=1
-                    continue
-
-            else:
-                pyg_mol = smi2pyg_mol_rdkit3d(smi, fg_featurizer=fg_featurizer, nsafe=nsafe, nconfs=n_confs_to_keep)
-                if pyg_mol is None:
-                    n_mols_skipped +=1
-                    continue
-            #! this will break as soon as the above else will be executed since conformers is not defined, fix it
             pyg_mol = mol2pyg(conformers[0], nsafe=nsafe, fg_featurizer=fg_featurizer) # set all non-pos-related fields
+            if len(conformers) > 1:
+                pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol, fill_with_frad) # set pos of all confs
 
-            if pyg_mol is None:
-                n_mols_skipped +=1
-                continue
-
-            pyg_mol = set_conformer_in_pyg_mol(conformers, pyg_mol, fill_with_frad) # set pos of all confs
-
-            if ys_provided:
-                pyg_mol.y = np.array(y, dtype=np.float32)
+            if ys_provided: pyg_mol.y = np.array(y, dtype=np.float32)
             pyg_mols_to_save.append(pyg_mol)
         except:
             n_mols_skipped +=1
-            warnings.warn("Could not generate confs for smi: {smi}, falling back to rdkit")
+            warnings.warn("Could not generate confs for smi: {smi}")
             continue
 
     print(f'number of mols skipped: {n_mols_skipped}')
-    if write:
-        save_npz(pyg_mols_to_save, folder_name=save_dir, split=split)
+    if write: save_npz(pyg_mols_to_save, folder_name=save_dir, split=split)
     return pyg_mols_to_save, n_mols_skipped
 
 
@@ -124,10 +98,20 @@ from source.utils.file_handling_utils import silentremove
 from einops import repeat
 from source.data_transforms._frad_transforms import apply_dihedral_noise_
 from copy import deepcopy
+from rdkit.Chem import rdMolAlign
 
 def set_conformer_in_pyg_mol(conformers, _pyg_mol, frad_fill_target:int=-1):
+    # different 3d pos of same molecule, 3d matrix pos and atom ordering could be different among conformers
+    ref_mol = conformers[0]
     batched_pos = []
     for mol in conformers:
+        _, _, atom_map = rdMolAlign.GetBestAlignmentTransform(mol, ref_mol, reflect=False, maxIters=1000)
+        atom_map_list = list(atom_map)
+        # Sort by ref_idx (second element)
+        atom_map_sorted = sorted(atom_map_list, key=lambda x: x[1]) # i.e. sort by ref_idx
+        new_order = [gen_idx for gen_idx, ref_idx in atom_map_sorted]
+        mol = rdChem.RenumberAtoms(mol, new_order) # now every mol has the same atom ordering
+
         pos = []
         conf = mol.GetConformer()
         for i, atom in enumerate(mol.GetAtoms()):
@@ -190,11 +174,8 @@ def generateConformationEnsembles(mol: CDPLChem.BasicMolecule, conf_gen: ConfGen
 
     # if sucessful, store the generated conformer ensemble as
     # per atom 3D coordinates arrays (= the way conformers are represented in CDPKit)
-    if status == ConfGen.ReturnCode.SUCCESS or status == ConfGen.ReturnCode.TOO_MUCH_SYMMETRY:
-        conf_gen.setConformers(mol)
-    else:
-        num_confs = 0
-
+    if status == ConfGen.ReturnCode.SUCCESS or status == ConfGen.ReturnCode.TOO_MUCH_SYMMETRY: conf_gen.setConformers(mol)
+    else: num_confs = 0
     return (status, num_confs)
 
 
@@ -244,18 +225,26 @@ def generate_conformers(
     tmp_dir:str='/home/nobilm@usi.ch/pretrain_paper/tmp/',
     filter_via_dihedral_fingerprint:bool=False,
     removeHs:bool=True,
-)-> list:
+) -> list[rdChem.Mol]:
     '''
     tmp folder is used to write/read output of conforge, tmp file is delete right after
     removeHs:bool=True whether to remove Hs from output
     '''
+    smi = drop_disconnected_components(smi)
     mol = CDPLChem.parseSMILES(smi)
-    status, num_confs = generateConformationEnsembles(mol, conf_gen)
-    print(f"{num_confs} for {smi}")
+    status, num_confs = generateConformationEnsembles(mol, conf_gen) # conformers are stored in mol
     if num_confs == 0:
         print(f"no conformers generated for {smi} via CONFORGE: {status_to_str[status]}")
         return []
 
+    if num_confs > 0:
+        # Retrieve conformer energies
+        energies = CDPLChem.getConformerEnergies(mol)
+        # print("Conformer energies (in order):", list(energies))
+        # Optionally, check if energies are sorted
+        assert all(energies[i] <= energies[i+1] for i in range(len(energies)-1)), "Conformer energies are not sorted!"
+
+    print(f"{num_confs} for {smi}")
     os.makedirs(tmp_dir, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=tmp_dir, delete=True) as tmp_file:
         unique_filename = tmp_file.name + ".sdf"
@@ -267,8 +256,7 @@ def generate_conformers(
         writer.close()
         mol_ensemble = list(rdChem.rdmolfiles.SDMolSupplier(unique_filename, removeHs=removeHs))
         silentremove(unique_filename)
-        if filter_via_dihedral_fingerprint:
-            return load_conformers_from_sdf(mol_ensemble, max_num_out_confs_to_keep)
+        if filter_via_dihedral_fingerprint: return load_conformers_from_sdf(mol_ensemble, max_num_out_confs_to_keep)
         return mol_ensemble[:max_num_out_confs_to_keep]
 
 

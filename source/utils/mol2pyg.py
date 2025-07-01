@@ -155,7 +155,7 @@ from rdkit.Chem import rdMolTransforms
 def mol2pyg(mol:rdChem.Mol, fg_featurizer:FGFeaturizer, **kwargs) -> Data:
     mol = rdChem.RemoveHs(mol)
     assert mol.GetNumConformers() == 1, "Only one conformer is supported"
-    conf = rdChem.Conformer(mol.GetConformer())
+    conf = mol.GetConformer()
     rdMolTransforms.CanonicalizeConformer(conf)
 
     num_atoms = mol.GetNumAtoms()
@@ -223,8 +223,7 @@ def mol2pyg(mol:rdChem.Mol, fg_featurizer:FGFeaturizer, **kwargs) -> Data:
         "count_frags" : count_frags,
     }
 
-    # {"safe_count" : int}
-    # {"homo_lumo_gap" : float}
+    # examples: {"safe_count" : int}, {"homo_lumo_gap" : float}
     for k,v in kwargs.items():
         molecular_properties[k]=float(v)
 
